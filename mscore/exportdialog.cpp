@@ -156,7 +156,8 @@ void ExportDialog::loadValues()
       pdfDpiSpinbox->setValue(preferences.getInt(PREF_EXPORT_PDF_DPI));
       
       pngDpiSpinbox->setValue(preferences.getDouble(PREF_EXPORT_PNG_RESOLUTION));
-      pngTransparentBackgroundCheckBox->setChecked(preferences.getBool(PREF_EXPORT_PNG_USETRANSPARENCY));
+      pngTransparentBackgroundCheckBox->setChecked(true);
+      std::cout << "here\n";
       
       audioNormaliseCheckBox->setChecked(preferences.getBool(PREF_EXPORT_AUDIO_NORMALIZE));
       int audioSampleRateIndex = audioSampleRate->findData(preferences.getInt(PREF_EXPORT_AUDIO_SAMPLERATE));
