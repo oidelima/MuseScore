@@ -3208,7 +3208,7 @@ QJsonObject MuseScore::saveMetadataJSON(Score* score)
       json.insert("fileVersion", score->mscVersion());
 
       json.insert("pages", score->npages());
-      json.insert("measures", score->nmeasures());
+      json.insert("numMeasures", score->nmeasures());
       json.insert("hasLyrics", boolToString(score->hasLyrics()));
       json.insert("hasHarmonies", boolToString(score->hasHarmonies()));
       json.insert("keysig", score->keysig());
@@ -3295,8 +3295,65 @@ QJsonObject MuseScore::saveMetadataJSON(Score* score)
             }
       json.insert("textFramesData", jsonTypeData);
 
+      // New metadata
+      json.insert("pageHeight", score->pages()[0]->bbox().height());
+      json.insert("pageWidth", score->pages()[0]->bbox().width());
+      json.insert("measures", measuresJsonArray(score));
+      json.insert("measuresIndexOrder", measuresIndexOrder(score));
+
       return json;
       }
+
+QJsonArray MuseScore::measuresIndexOrder(Score* score)
+{
+    QJsonArray measuresIndexOrder;
+
+    for (const RepeatSegment* rs : score->repeatList()) {
+        int startTick = rs->tick;
+        int endTick   = startTick + rs->len();
+
+        for (const Measure* m = score->tick2measure(Fraction::fromTicks(startTick)); m; m = m->nextMeasure()) {
+            measuresIndexOrder.append(m->measureIndex());
+
+            if (m->endTick().ticks() >= endTick) {
+                break;
+            }
+        }
+    }
+    return measuresIndexOrder;
+
+}
+
+QJsonArray MuseScore::measuresJsonArray(Score* score)
+{
+    QJsonArray jsonMeasuresArray;
+    const QList<Page*>& pages = score->pages();
+
+    for (int pi = 0; pi < pages.size(); pi++){
+        Page* page = pages[pi];
+        // std::vector<EngravingItem*> elements = page->elements();
+        QList<System*> systems = page->systems();\
+
+        for (System* s : page->systems()){
+            for (MeasureBase* measure : s->measures()) {
+                if(measure->isMeasure()){
+                    QPointF measurePosition(measure->pagePos());
+                    QJsonObject jsonMeasure;
+                    jsonMeasure.insert("x", measurePosition.x());
+                    jsonMeasure.insert("y", measurePosition.y());
+                    jsonMeasure.insert("width", measure->width());
+                    jsonMeasure.insert("height", measure->height());
+                    jsonMeasure.insert("ticksNum", toMeasure(measure)->ticks().numerator());
+                    jsonMeasure.insert("ticksDen",toMeasure(measure)->ticks().denominator());
+                    jsonMeasure.insert("page", static_cast<int>(page->no()));
+                    jsonMeasuresArray.append(jsonMeasure);
+                }
+                
+            }
+        }        
+    }
+    return jsonMeasuresArray;
+}
 
 class CustomJsonWriter
 {
