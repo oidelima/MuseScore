@@ -29,6 +29,7 @@
 
 #include "engraving/dom/tempotext.h"
 #include "engraving/dom/text.h"
+#include "engraving/dom/repeatlist.h"
 
 #include "log.h"
 
@@ -61,7 +62,7 @@ mu::RetVal<std::string> NotationMeta::metaJson(notation::INotationPtr notation)
     json["mscoreVersion"] =  score->mscoreVersion().toQString();
     json["fileVersion"] =  score->mscVersion();
     json["pages"] =  static_cast<int>(score->npages()); // no = operator for size_t
-    json["measures"] = static_cast<int>(score->nmeasures()); // no = operator for size_t
+    json["measuresNum"] = static_cast<int>(score->nmeasures()); // no = operator for size_t
     json["hasLyrics"] =  boolToString(score->hasLyrics());
     json["hasHarmonies"] =  boolToString(score->hasHarmonies());
     json["keysig"] =  score->keysig();
@@ -77,6 +78,13 @@ mu::RetVal<std::string> NotationMeta::metaJson(notation::INotationPtr notation)
     json["parts"] =  partsJsonArray(score);
     json["pageFormat"] = pageFormatJson(score->style());
     json["textFramesData"] =  typeDataJson(score);
+
+    // Measures metadata
+    json["measures"] = measuresJsonArray(score);
+    json["measuresIndexOrder"] = measuresIndexOrder(score);
+    json["pageHeight"] = ((score->style()).styleD(mu::engraving::Sid::pageHeight)) * mu::engraving::DPI;
+    json["pageWidth"] = ((score->style()).styleD(mu::engraving::Sid::pageWidth)) * mu::engraving::DPI;
+
 
     RetVal<std::string> result;
     result.ret = make_ret(Ret::Code::Ok);
@@ -258,4 +266,53 @@ QJsonObject NotationMeta::typeDataJson(mu::engraving::Score* score)
     }
 
     return typesData;
+}
+
+QJsonArray NotationMeta::measuresIndexOrder(const mu::engraving::Score* score)
+{
+    QJsonArray measuresIndexOrder;
+    for (const RepeatSegment* rs : score->repeatList()) {
+        int startTick = rs->tick;
+        int endTick   = startTick + rs->len();
+
+        for (const Measure* m = score->tick2measure(Fraction::fromTicks(startTick)); m; m = m->nextMeasure()) {
+            measuresIndexOrder.append(m->measureIndex());
+
+            if (m->endTick().ticks() >= endTick) {
+                break;
+            }
+        }
+    }
+    return measuresIndexOrder;
+
+}
+
+QJsonArray NotationMeta::measuresJsonArray(const mu::engraving::Score* score)
+{
+    QJsonArray jsonMeasuresArray;
+    const std::vector<Page*>& pages = score->pages();
+
+    for (int pi = 0; pi < pages.size(); pi++){
+        Page* page = pages[pi];
+        std::vector<System*> systems = page->systems();
+
+        for (System* s : page->systems()){
+            for (MeasureBase* measure : s->measures()) {
+                if(measure->isMeasure()){
+                    mu::engraving::PointF measurePosition(measure->pagePos());
+                    QJsonObject jsonMeasure;
+                    jsonMeasure.insert("x", measurePosition.x());
+                    jsonMeasure.insert("y", measurePosition.y());
+                    jsonMeasure.insert("width", measure->width());
+                    jsonMeasure.insert("height", measure->height());
+                    jsonMeasure.insert("ticksNum", toMeasure(measure)->ticks().numerator());
+                    jsonMeasure.insert("ticksDen",toMeasure(measure)->ticks().denominator());
+                    jsonMeasure.insert("page", static_cast<int>(page->no()));
+                    jsonMeasuresArray.append(jsonMeasure);
+                }
+
+            }
+        }        
+    }
+    return jsonMeasuresArray;
 }
