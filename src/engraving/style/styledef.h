@@ -832,6 +832,8 @@ enum class Sid {
     stringNumberOffset,
     preferSameStringForTranspose,
 
+    stringTuningsFontSize,
+
     harpPedalDiagramFontFace,
     harpPedalDiagramFontSize,
     harpPedalDiagramLineSpacing,
@@ -1195,6 +1197,8 @@ enum class Sid {
     glissandoFrameBgColor,
     glissandoLineWidth,
     glissandoText,
+    glissandoStyle,
+    glissandoStyleHarp,
 
     bendFontFace,
     bendFontSize,
@@ -1214,6 +1218,7 @@ enum class Sid {
     bendArrowWidth,
 
     guitarBendLineWidth,
+    guitarBendLineWidthTab,
     guitarBendHeightAboveTABStaff,
     guitarBendPartialBendHeight,
     guitarBendUseFull,

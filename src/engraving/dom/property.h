@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __PROPERTY_H__
-#define __PROPERTY_H__
+#ifndef MU_ENGRAVING_PROPERTY_H
+#define MU_ENGRAVING_PROPERTY_H
 
 #include "types/string.h"
 
@@ -389,10 +389,14 @@ enum class Pid {
     TREMOLO_STYLE,
     HARMONY_TYPE,
 
+    ARPEGGIO_SPAN,
+
     BEND_TYPE,
     BEND_CURVE,
     BEND_VERTEX_OFF,
     BEND_SHOW_HOLD_LINE,
+    BEND_START_TIME_FACTOR,
+    BEND_END_TIME_FACTOR,
 
     TREMOLOBAR_TYPE,
     TREMOLOBAR_CURVE,

@@ -210,6 +210,8 @@ set(MODULE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/playback/renderers/tremolorenderer.h
     ${CMAKE_CURRENT_LIST_DIR}/playback/renderers/chordarticulationsrenderer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/playback/renderers/chordarticulationsrenderer.h
+    ${CMAKE_CURRENT_LIST_DIR}/playback/renderers/bendsrenderer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/playback/renderers/bendsrenderer.h
     ${CMAKE_CURRENT_LIST_DIR}/playback/metaparsers/internal/symbolsmetaparser.cpp
     ${CMAKE_CURRENT_LIST_DIR}/playback/metaparsers/internal/symbolsmetaparser.h
     ${CMAKE_CURRENT_LIST_DIR}/playback/metaparsers/internal/annotationsmetaparser.cpp
@@ -302,6 +304,10 @@ set(MODULE_LINK
 
 if (MUE_ENABLE_ENGRAVING_LD_ACCESS)
     set(MODULE_DEF ${MODULE_DEF} -DMUE_ENABLE_ENGRAVING_LD_ACCESS)
+endif()
+
+if (MUE_ENABLE_ENGRAVING_LD_PASSES)
+    set(MODULE_DEF ${MODULE_DEF} -DMUE_ENABLE_ENGRAVING_LD_PASSES)
 endif()
 
 set(MODULE_USE_UNITY_NONE ON)

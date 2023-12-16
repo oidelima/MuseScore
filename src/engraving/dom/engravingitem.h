@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __ELEMENT_H__
-#define __ELEMENT_H__
+#ifndef MU_ENGRAVING_ELEMENT_H
+#define MU_ENGRAVING_ELEMENT_H
 
 #include <optional>
 
@@ -52,6 +52,16 @@
     LayoutData* createLayoutData() const override { return new Class::LayoutData(); } \
 
 namespace mu::engraving {
+template<typename T>
+inline void dump(const ld_field<T>& f, std::stringstream& ss)
+{
+    if (f.has_value()) {
+        dump(f.value(), ss);
+    } else {
+        ss << "no value";
+    }
+}
+
 class Factory;
 class XmlReader;
 
@@ -237,8 +247,8 @@ public:
     virtual void setOffset(const PointF& o) { m_offset = o; }
     void setOffset(double x, double y) { m_offset.setX(x), m_offset.setY(y); }
     PointF& roffset() { return m_offset; }
-    double& rxoffset() { return m_offset.rx(); }
-    double& ryoffset() { return m_offset.ry(); }
+    real_t& rxoffset() { return m_offset.rx(); }
+    real_t& ryoffset() { return m_offset.ry(); }
 
     virtual Fraction tick() const;
     virtual Fraction rtick() const;
@@ -349,15 +359,15 @@ public:
     virtual TranslatableString subtypeUserName() const;
     virtual String translatedSubtypeUserName() const;
 
+    virtual void setColor(const mu::draw::Color& c);
     virtual mu::draw::Color color() const;
     mu::draw::Color curColor() const;
     mu::draw::Color curColor(bool isVisible) const;
     mu::draw::Color curColor(bool isVisible, mu::draw::Color normalColor) const;
-    virtual void setColor(const mu::draw::Color& c) { m_color = c; }
 
     void undoSetColor(const mu::draw::Color& c);
     void undoSetVisible(bool v);
-    void undoAddElement(EngravingItem* element);
+    void undoAddElement(EngravingItem* element, bool addToLinkedStaves = true);
 
     static ElementType readType(XmlReader& node, PointF*, Fraction*);
     static EngravingItem* readMimeData(Score* score, const mu::ByteArray& data, PointF*, Fraction*);
@@ -389,7 +399,7 @@ public:
  */
     virtual bool mousePress(EditData&) { return false; }
 
-    mutable bool itemDiscovered      { false };       ///< helper flag for bsp
+    mutable bool itemDiscovered = false;       // helper flag for bsp
 
     void scanElements(void* data, void (* func)(void*, EngravingItem*), bool all=true) override;
 
@@ -490,7 +500,7 @@ public:
 
     struct Autoplace {
         OffsetChange offsetChanged = OffsetChange::NONE;     // set by user actions that change offset, used by autoplace
-        PointF changedPos;                // position set when changing offset
+        PointF changedPos;                                   // position set when changing offset
     };
 
     struct LayoutData {
@@ -569,9 +579,21 @@ public:
 
         OffsetChange offsetChanged() const { return autoplace.offsetChanged; }
 
+        void dump(std::stringstream& ss) const;
+
     protected:
+
+        virtual void supDump(std::stringstream& ss) const { UNUSED(ss); }
+
+#ifndef NDEBUG
+        void doSetPosDebugHook(double x, double y);
+#endif
+
         inline void doSetPos(double x, double y)
         {
+#ifndef NDEBUG
+            doSetPosDebugHook(x, y);
+#endif
             m_pos.mut_value().setX(x),
             m_pos.mut_value().setY(y);
         }
@@ -600,15 +622,16 @@ public:
     mu::RectF canvasBoundingRect(LD_ACCESS mode = LD_ACCESS::CHECK) const { return ldata()->bbox(mode).translated(canvasPos()); }
 
     virtual bool isPropertyLinkedToMaster(Pid id) const;
+    virtual bool isUnlinkedFromMaster() const;
     void unlinkPropertyFromMaster(Pid id);
     void relinkPropertiesToMaster(PropertyGroup propGroup);
+    void relinkPropertyToMaster(Pid propertyId);
     PropertyPropagation propertyPropagation(const EngravingItem* destinationItem, Pid propertyId) const;
     virtual bool canBeExcludedFromOtherParts() const { return false; }
     virtual void manageExclusionFromParts(bool exclude);
 
     //! --- Old Interface ---
     void setbbox(const mu::RectF& r) { mutldata()->setBbox(r); }
-    void addbbox(const mu::RectF& r) { mutldata()->addBbox(r); }
     double height() const { return ldata()->bbox().height(); }
     void setHeight(double v) { mutldata()->setHeight(v); }
 
@@ -636,6 +659,8 @@ protected:
 #endif
 
     virtual LayoutData* createLayoutData() const;
+    virtual const LayoutData* ldataInternal() const;
+    virtual LayoutData* mutldataInternal();
 
     mutable int m_z = 0;
     mu::draw::Color m_color;                // element color attribute
@@ -726,11 +751,6 @@ class Compound : public EngravingItem
 {
     OBJECT_ALLOCATOR(engraving, Compound)
 
-    std::list<EngravingItem*> elements;
-
-protected:
-    const std::list<EngravingItem*>& getElements() const { return elements; }
-
 public:
     Compound(const ElementType& type, Score*);
     Compound(const Compound&);
@@ -741,6 +761,12 @@ public:
     virtual void setSelected(bool f);
     virtual void setVisible(bool);
     virtual void layout();
+
+protected:
+    const std::list<EngravingItem*>& getElements() const { return m_elements; }
+
+private:
+    std::list<EngravingItem*> m_elements;
 };
 
 extern bool elementLessThan(const EngravingItem* const, const EngravingItem* const);
@@ -748,7 +774,7 @@ extern void collectElements(void* data, EngravingItem* e);
 } // mu::engraving
 
 #ifndef NO_QT_SUPPORT
-Q_DECLARE_METATYPE(mu::engraving::ElementType);
+Q_DECLARE_METATYPE(mu::engraving::ElementType)
 #endif
 
 #endif

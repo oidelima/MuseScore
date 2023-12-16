@@ -147,6 +147,12 @@
 
 #include "infrastructure/rtti.h"
 
+// dev
+#include "dom/system.h"
+#include "dom/measure.h"
+#include "dom/segment.h"
+#include "dom/chord.h"
+
 using namespace mu::engraving;
 using namespace mu::engraving::rtti;
 using namespace mu::engraving::rendering::dev;
@@ -347,7 +353,7 @@ void TDraw::drawItem(const EngravingItem* item, draw::Painter* painter)
         break;
     case ElementType::TIMESIG:              draw(item_cast<const TimeSig*>(item), painter);
         break;
-    case ElementType::TREMOLO:              draw(item_cast<const Tremolo*>(item), painter);
+    case ElementType::TREMOLO:              draw(item_cast<const TremoloDispatcher*>(item), painter);
         break;
     case ElementType::TREMOLOBAR:           draw(item_cast<const TremoloBar*>(item), painter);
         break;
@@ -364,6 +370,18 @@ void TDraw::drawItem(const EngravingItem* item, draw::Painter* painter)
         break;
 
     case ElementType::WHAMMY_BAR_SEGMENT:   draw(item_cast<const WhammyBarSegment*>(item), painter);
+        break;
+
+    // dev
+    case ElementType::SYSTEM:               draw(item_cast<const System*>(item), painter);
+        break;
+    case ElementType::MEASURE:              draw(item_cast<const Measure*>(item), painter);
+        break;
+    case ElementType::SEGMENT:              draw(item_cast<const Segment*>(item), painter);
+        break;
+    case ElementType::CHORD:                draw(item_cast<const Chord*>(item), painter);
+        break;
+    case ElementType::GRACE_NOTES_GROUP:
         break;
     default:
         NOT_IMPLEMENTED << " type: " << item->typeName();
@@ -1007,7 +1025,7 @@ void TDraw::draw(const Bracket* item, Painter* painter)
             painter->setBrush(Brush(item->curColor()));
             painter->drawPath(ldata->path);
         } else {
-            double h = ldata->bracketHeight();
+            double h = ldata->bracketHeight;
             double mag = h / (100 * item->magS());
             painter->setPen(item->curColor());
             painter->save();
@@ -1018,7 +1036,7 @@ void TDraw::draw(const Bracket* item, Painter* painter)
     }
     break;
     case BracketType::NORMAL: {
-        double h = ldata->bracketHeight();
+        double h = ldata->bracketHeight;
         double spatium = item->spatium();
         double w = item->style().styleMM(Sid::bracketWidth);
         double bd = (item->style().styleSt(Sid::MusicalSymbolFont) == "Leland") ? spatium * .5 : spatium * .25;
@@ -1033,9 +1051,9 @@ void TDraw::draw(const Bracket* item, Painter* painter)
     }
     break;
     case BracketType::SQUARE: {
-        double h = ldata->bracketHeight();
+        double h = ldata->bracketHeight;
         double lineW = item->style().styleMM(Sid::staffLineWidth);
-        double bracketWidth = ldata->bracketWidth() - lineW / 2;
+        double bracketWidth = ldata->bracketWidth - lineW / 2;
         Pen pen(item->curColor(), lineW, PenStyle::SolidLine, PenCapStyle::FlatCap);
         painter->setPen(pen);
         painter->drawLine(LineF(0.0, 0.0, 0.0, h));
@@ -1044,7 +1062,7 @@ void TDraw::draw(const Bracket* item, Painter* painter)
     }
     break;
     case BracketType::LINE: {
-        double h = ldata->bracketHeight();
+        double h = ldata->bracketHeight;
         double w = 0.67 * item->style().styleMM(Sid::bracketWidth);
         Pen pen(item->curColor(), w, PenStyle::SolidLine, PenCapStyle::FlatCap);
         painter->setPen(pen);
@@ -1489,6 +1507,7 @@ void TDraw::draw(const GuitarBendSegment* item, Painter* painter)
     pen.setWidthF(item->lineWidth());
     pen.setCapStyle(PenCapStyle::FlatCap);
     pen.setJoinStyle(PenJoinStyle::MiterJoin);
+    pen.setColor(item->uiColor());
     painter->setPen(pen);
 
     Brush brush;
@@ -1499,7 +1518,7 @@ void TDraw::draw(const GuitarBendSegment* item, Painter* painter)
 
     if (item->staff()->isTabStaff(item->tick())) {
         brush.setStyle(BrushStyle::SolidPattern);
-        brush.setColor(item->curColor());
+        brush.setColor(item->uiColor());
         painter->setBrush(brush);
         painter->setNoPen();
         painter->drawPolygon(item->ldata()->arrow());
@@ -2130,7 +2149,7 @@ void TDraw::draw(const MMRest* item, Painter* painter)
     if (item->style().styleB(Sid::oldStyleMultiMeasureRests)
         && ldata->number <= item->style().styleI(Sid::mmRestOldStyleMaxMeasures)) {
         // draw rest symbols
-        double x = (ldata->restWidth() - ldata->symsWidth) * 0.5;
+        double x = (ldata->restWidth - ldata->symsWidth) * 0.5;
         double spacing = item->style().styleMM(Sid::mmRestOldStyleSpacing);
         for (SymId sym : ldata->restSyms) {
             double y = (sym == SymId::restWhole ? -_spatium : 0);
@@ -2153,11 +2172,11 @@ void TDraw::draw(const MMRest* item, Painter* painter)
                 && numberBox.bottom() >= -halfHBarThickness
                 && numberBox.top() <= halfHBarThickness) {
                 double gapDistance = (numberBox.width() + _spatium) * .5;
-                double midpoint = ldata->restWidth() * .5;
+                double midpoint = ldata->restWidth * .5;
                 painter->drawLine(LineF(0.0, 0.0, midpoint - gapDistance, 0.0));
-                painter->drawLine(LineF(midpoint + gapDistance, 0.0, ldata->restWidth(), 0.0));
+                painter->drawLine(LineF(midpoint + gapDistance, 0.0, ldata->restWidth, 0.0));
             } else {
-                painter->drawLine(LineF(0.0, 0.0, ldata->restWidth(), 0.0));
+                painter->drawLine(LineF(0.0, 0.0, ldata->restWidth, 0.0));
             }
         }
 
@@ -2168,7 +2187,7 @@ void TDraw::draw(const MMRest* item, Painter* painter)
             painter->setPen(pen);
             double halfVStrokeHeight = item->style().styleMM(Sid::mmRestHBarVStrokeHeight) * .5 * mag;
             painter->drawLine(LineF(0.0, -halfVStrokeHeight, 0.0, halfVStrokeHeight));
-            painter->drawLine(LineF(ldata->restWidth(), -halfVStrokeHeight, ldata->restWidth(), halfVStrokeHeight));
+            painter->drawLine(LineF(ldata->restWidth, -halfVStrokeHeight, ldata->restWidth, halfVStrokeHeight));
         }
     }
 }
@@ -2424,7 +2443,7 @@ void TDraw::draw(const Rest* item, Painter* painter)
     const Rest::LayoutData* ldata = item->ldata();
 
     painter->setPen(item->curColor());
-    item->drawSymbol(ldata->sym(), painter);
+    item->drawSymbol(ldata->sym, painter);
 }
 
 //! NOTE May be removed later (should be only single mode)
@@ -2473,7 +2492,7 @@ void TDraw::draw(const ShadowNote* item, Painter* painter)
         }
 
         if (item->hasFlag() && up) {
-            posDot.rx() = std::max(posDot.rx(), noteheadWidth + item->symBbox(item->flagSym()).right());
+            posDot.rx() = std::max(posDot.x(), noteheadWidth + item->symBbox(item->flagSym()).right());
         }
 
         for (int i = 0; i < item->duration().dots(); i++) {
@@ -2850,7 +2869,7 @@ void TDraw::draw(const TabDurationSymbol* item, Painter* painter)
         painter->drawText(PointF(0.0, 0.0), item->text());
     } else {
         // if beam grid, draw stem line
-        TablatureDurationFont& font = item->tab()->_durationFonts[item->tab()->_durationFontIdx];
+        const TablatureDurationFont& font = item->tab()->tabDurationFont();
         double _spatium = item->spatium();
         pen.setCapStyle(PenCapStyle::FlatCap);
         pen.setWidthF(font.gridStemWidth * _spatium);
@@ -2963,7 +2982,7 @@ void TDraw::draw(const TimeSig* item, Painter* painter)
     }
 }
 
-void TDraw::draw(const Tremolo* item, Painter* painter)
+void TDraw::draw(const TremoloDispatcher* item, Painter* painter)
 {
     TRACE_DRAW_ITEM;
 
@@ -3041,7 +3060,10 @@ void TDraw::draw(const Tuplet* item, Painter* painter)
         painter->translate(-pos);
     }
     if (item->hasBracket()) {
-        painter->setPen(Pen(color, item->bracketWidth().val() * item->mag()));
+        Pen pen(color, item->bracketWidth().val() * item->mag());
+        pen.setJoinStyle(PenJoinStyle::MiterJoin);
+        pen.setCapStyle(PenCapStyle::FlatCap);
+        painter->setPen(pen);
         if (!item->number()) {
             painter->drawPolyline(item->bracketL, 4);
         } else {
@@ -3068,4 +3090,33 @@ void TDraw::draw(const WhammyBarSegment* item, Painter* painter)
 {
     TRACE_DRAW_ITEM;
     drawTextLineBaseSegment(item, painter);
+}
+
+// dev
+void TDraw::draw(const System* item, draw::Painter* painter)
+{
+    UNUSED(item);
+    UNUSED(painter);
+    //painter->drawRect(item->ldata()->bbox());
+}
+
+void TDraw::draw(const Measure* item, draw::Painter* painter)
+{
+    UNUSED(item);
+    UNUSED(painter);
+    //painter->drawRect(item->ldata()->bbox());
+}
+
+void TDraw::draw(const Segment* item, draw::Painter* painter)
+{
+    UNUSED(item);
+    UNUSED(painter);
+    //painter->drawRect(item->ldata()->bbox());
+}
+
+void TDraw::draw(const Chord* item, draw::Painter* painter)
+{
+    UNUSED(item);
+    UNUSED(painter);
+    //painter->drawRect(item->ldata()->bbox());
 }

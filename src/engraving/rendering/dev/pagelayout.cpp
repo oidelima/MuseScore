@@ -321,15 +321,17 @@ void PageLayout::collectPage(LayoutContext& ctx)
                             }
                             ArpeggioLayout::layoutArpeggio2(c->arpeggio(), ctx);
                             ChordLayout::layoutSpanners(c, ctx);
-                            if (c->tremolo()) {
-                                Tremolo* t = c->tremolo();
-                                Chord* c1 = t->chord1();
-                                Chord* c2 = t->chord2();
-                                if (t->twoNotes() && c1 && c2 && (c1->staffMove() || c2->staffMove())) {
-                                    // For cross-staff tremolo, vertical justification may have changed
-                                    // staff distances, and therefore also stem directions, so re-compute them
-                                    ChordLayout::computeUp(c1, ctx); // This will also call a tremolo layout
-                                    ChordLayout::computeUp(c2, ctx);
+                            if (c->tremoloDispatcher()) {
+                                TremoloDispatcher* t = c->tremoloDispatcher();
+                                if (t->twoNotes()) {
+                                    Chord* c1 = t->chord1();
+                                    Chord* c2 = t->chord2();
+                                    if (c1 && c2 && (c1->staffMove() || c2->staffMove())) {
+                                        // For cross-staff tremolo, vertical justification may have changed
+                                        // staff distances, and therefore also stem directions, so re-compute them
+                                        ChordLayout::computeUp(c1, ctx); // This will also call a tremolo layout
+                                        ChordLayout::computeUp(c2, ctx);
+                                    }
                                 }
                             }
                             // Fingering and articulations on top of cross-staff beams must be laid out here
@@ -356,6 +358,23 @@ void PageLayout::collectPage(LayoutContext& ctx)
                 }
             }
             MeasureLayout::layout2(m, ctx);
+        }
+    }
+
+    // If this is the last page we layout, we must also relayout the first barlines of the
+    // next page, because they may have been altered while collecting the systems.
+    MeasureBase* lastOfThisPage = ctx.mutState().page()->systems().back()->measures().back();
+    MeasureBase* firstOfNextPage = lastOfThisPage ? lastOfThisPage->next() : nullptr;
+    if (firstOfNextPage && firstOfNextPage->isMeasure() && firstOfNextPage->tick() > ctx.state().endTick()) {
+        for (Segment& segment : toMeasure(firstOfNextPage)->segments()) {
+            if (!segment.isType(SegmentType::BarLineType)) {
+                continue;
+            }
+            for (EngravingItem* item : segment.elist()) {
+                if (item && item->isBarLine()) {
+                    rendering::dev::TLayout::layoutBarLine2(toBarLine(item), ctx);
+                }
+            }
         }
     }
 
@@ -402,6 +421,7 @@ void PageLayout::collectPage(LayoutContext& ctx)
 
 void PageLayout::layoutPage(LayoutContext& ctx, Page* page, double restHeight, double footerPadding)
 {
+    TRACEFUNC;
     if (restHeight < 0.0) {
         LOGN("restHeight < 0.0: %f\n", restHeight);
         restHeight = 0;

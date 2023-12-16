@@ -1082,7 +1082,7 @@ void Measure::cmdRemoveStaves(staff_idx_t sStaff, staff_idx_t eStaff)
             EngravingItem* el = s->element(track);
             if (el) {
                 el->undoUnlink();
-                score()->undo(new RemoveElement(el));
+                score()->doUndoRemoveElement(el);
             }
         }
 
@@ -1091,7 +1091,7 @@ void Measure::cmdRemoveStaves(staff_idx_t sStaff, staff_idx_t eStaff)
         for (EngravingItem* e : annotations) {
             if (allowRemoveWhenRemovingStaves(e, sStaff, eStaff)) {
                 e->undoUnlink();
-                score()->undo(new RemoveElement(e));
+                score()->doUndoRemoveElement(e);
             }
         }
     }
@@ -1103,7 +1103,7 @@ void Measure::cmdRemoveStaves(staff_idx_t sStaff, staff_idx_t eStaff)
 
         if (allowRemoveWhenRemovingStaves(e, sStaff, eStaff)) {
             e->undoUnlink();
-            score()->undo(new RemoveElement(e));
+            score()->doUndoRemoveElement(e);
         }
     }
 
@@ -1403,7 +1403,21 @@ EngravingItem* Measure::drop(EditData& data)
     case ElementType::DYNAMIC:
     case ElementType::EXPRESSION:
     case ElementType::FRET_DIAGRAM:
+        e->setParent(seg);
+        e->setTrack(staffIdx * VOICES);
+        score()->undoAddElement(e);
+        return e;
+
     case ElementType::STRING_TUNINGS:
+        if (!staff->isPrimaryStaff()) {
+            staff = staff->primaryStaff();
+            if (!staff) {
+                return nullptr;
+            }
+
+            staffIdx = staff->idx();
+        }
+
         e->setParent(seg);
         e->setTrack(staffIdx * VOICES);
         score()->undoAddElement(e);
@@ -1974,7 +1988,7 @@ void Measure::connectTremolo()
             }
 
             Chord* c = toChord(e);
-            Tremolo* tremolo = c->tremolo();
+            TremoloDispatcher* tremolo = c->tremoloDispatcher();
             if (tremolo && tremolo->twoNotes()) {
                 // Ensure correct duration type for chord
                 c->setDurationType(tremolo->durationType());
@@ -1995,7 +2009,7 @@ void Measure::connectTremolo()
                         }
                         Chord* nc = toChord(element);
                         tremolo->setChords(c, nc);
-                        nc->setTremolo(tremolo);
+                        nc->setTremoloDispatcher(tremolo);
                         break;
                     }
                 }
@@ -2003,7 +2017,7 @@ void Measure::connectTremolo()
                 if (!tremolo->chord2()) {
                     // this is an invalid tremolo! a continued tremolo was started on one note without a valid next note in that measure
                     // remove the tremolo entirely
-                    c->setTremolo(nullptr);
+                    c->setTremoloDispatcher(nullptr);
                     score()->removeElement(tremolo);
                 }
             }
@@ -3224,13 +3238,18 @@ void Measure::checkTrailer()
 
 bool Measure::canAddStringTunings(staff_idx_t staffIdx) const
 {
-    const Staff* staff = score()->staff(staffIdx);
+    Staff* staff = score()->staff(staffIdx);
     if (!staff) {
         return false;
     }
 
-    if (staff->isLinked()) {
-        return false;
+    if (!staff->isPrimaryStaff()) {
+        staff = staff->primaryStaff();
+        if (!staff) {
+            return false;
+        }
+
+        staffIdx = staff->idx();
     }
 
     const StringData* stringData = staff->part()->instrument(tick())->stringData();

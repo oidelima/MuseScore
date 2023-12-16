@@ -67,6 +67,8 @@
 #include "undo.h"
 #include "utils.h"
 
+#include "navigate.h"
+
 #ifndef ENGRAVING_NO_ACCESSIBILITY
 #include "accessibility/accessibleitem.h"
 #include "accessibility/accessibleroot.h"
@@ -2270,16 +2272,6 @@ int Note::line() const
 }
 
 //---------------------------------------------------------
-//   setString
-//---------------------------------------------------------
-
-void Note::setString(int val)
-{
-    m_string = val;
-    mutldata()->setPosY(m_string * spatium() * 1.5);
-}
-
-//---------------------------------------------------------
 //   setHeadScheme
 //---------------------------------------------------------
 
@@ -2342,7 +2334,7 @@ int Note::ppitch() const
         if (staff && staff->isDrumStaff(tick)) {
             const Drumset* ds = staff->part()->instrument(tick)->drumset();
             if (ds) {
-                DrumInstrumentVariant div = ds->findVariant(m_pitch, ch->articulations(), ch->tremolo());
+                DrumInstrumentVariant div = ds->findVariant(m_pitch, ch->articulations(), ch->tremoloDispatcher());
                 if (div.pitch != INVALID_PITCH) {
                     return div.pitch;
                 }
@@ -2399,6 +2391,15 @@ int Note::octave() const
 int Note::playingOctave() const
 {
     return mu::engraving::playingOctave(ppitch(), tpc1());
+}
+
+double Note::playingTuning() const
+{
+    if (!m_accidental) {
+        return m_tuning;
+    }
+
+    return m_tuning + Accidental::subtype2centOffset(m_accidental->accidentalType());
 }
 
 //---------------------------------------------------------
@@ -2549,7 +2550,7 @@ void Note::verticalDrag(EditData& ed)
         Key cKey = staff()->concertKey(_tick);
         staff_idx_t idx = chord()->vStaffIdx();
         Interval interval = staff()->part()->instrument(_tick)->transpose();
-        int newPitch = line2pitch(ned->line + lineOffset, score()->staff(idx)->clef(_tick), key);
+        int newPitch = line2pitch(ned->line + lineOffset, score()->staff(idx)->clef(_tick), key) - linkedOttavaPitchOffset();
 
         if (!concertPitch()) {
             newPitch += interval.chromatic;
@@ -2774,6 +2775,11 @@ PropertyValue Note::getProperty(Pid propertyId) const
         return fixed();
     case Pid::FIXED_LINE:
         return fixedLine();
+    case Pid::POSITION_LINKED_TO_MASTER:
+    case Pid::APPEARANCE_LINKED_TO_MASTER:
+        if (chord()) {
+            return EngravingItem::getProperty(propertyId).toBool() && chord()->getProperty(propertyId).toBool();
+        }
     default:
         break;
     }
@@ -2874,6 +2880,13 @@ bool Note::setProperty(Pid propertyId, const PropertyValue& v)
     case Pid::FIXED_LINE:
         setFixedLine(v.toInt());
         break;
+    case Pid::POSITION_LINKED_TO_MASTER:
+    case Pid::APPEARANCE_LINKED_TO_MASTER:
+        if (v.toBool() == true && chord()) {
+            // when re-linking, also re-link the parent chord
+            chord()->setProperty(propertyId, v);
+        }
+    // fall through
     default:
         if (!EngravingItem::setProperty(propertyId, v)) {
             return false;
@@ -2927,6 +2940,11 @@ PropertyValue Note::propertyDefault(Pid propertyId) const
     case Pid::PITCH:
     case Pid::TPC1:
         return PropertyValue();
+    case Pid::VISIBLE:
+        if (staffType() && staffType()->isTabStaff() && bendBack()) {
+            return false;
+        }
+        return EngravingItem::propertyDefault(propertyId);
     default:
         break;
     }
@@ -3258,7 +3276,19 @@ EngravingItem* Note::nextElement()
         }
         return nullptr;
 
-    case ElementType::NOTE:
+    case ElementType::NOTE: {
+        if (isPreBendStart() || isGraceBendStart()) {
+            return bendFor()->frontSegment();
+        }
+
+        GraceNotesGroup& graceNotesAfter = chord()->graceNotesAfter();
+        if (!graceNotesAfter.empty()) {
+            Chord* graceNotesAfterFirstChord = graceNotesAfter.front();
+            if (graceNotesAfterFirstChord) {
+                return graceNotesAfterFirstChord->notes().front();
+            }
+        }
+
         if (!m_el.empty()) {
             return m_el[0];
         }
@@ -3273,7 +3303,7 @@ EngravingItem* Note::nextElement()
             }
         }
         return nullptr;
-
+    }
     default:
         return nullptr;
     }
@@ -3581,6 +3611,34 @@ bool Note::isGraceBendStart() const
     GuitarBend* bend = bendFor();
 
     return bend && bend->type() == GuitarBendType::GRACE_NOTE_BEND;
+}
+
+bool Note::hasAnotherStraightAboveOrBelow(bool above) const
+{
+    if (!chord()) {
+        return false;
+    }
+
+    const std::vector<Note*>& notes = chord()->notes();
+
+    if ((above && this == notes.back()) || (!above && this == notes.front())) {
+        return false;
+    }
+
+    const double limitDiff = 0.5 * spatium();
+    for (Note* note : notes) {
+        if (note == this) {
+            continue;
+        }
+        if (abs(note->pos().x() - pos().x()) > limitDiff) {
+            return false;
+        }
+        if ((above && note->line() < m_line) || (!above && note->line() > m_line)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 mu::PointF Note::posInStaffCoordinates()

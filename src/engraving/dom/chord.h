@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __CHORD_H__
-#define __CHORD_H__
+#ifndef MU_ENGRAVING_CHORD_H
+#define MU_ENGRAVING_CHORD_H
 
 /**
  \file
@@ -50,7 +50,7 @@ class NoteEventList;
 class Stem;
 class StemSlash;
 class StretchedBend;
-class Tremolo;
+class TremoloDispatcher;
 
 enum class TremoloChordType : char {
     TremoloSingle, TremoloFirstNote, TremoloSecondNote
@@ -162,8 +162,12 @@ public:
     Stem* stem() const { return m_stem; }
     Arpeggio* arpeggio() const { return m_arpeggio; }
     void setArpeggio(Arpeggio* a) { m_arpeggio = a; }
-    Tremolo* tremolo() const { return m_tremolo; }
-    void setTremolo(Tremolo* t, bool applyLogic = true);
+
+    Arpeggio* spanArpeggio() const { return m_spanArpeggio; }
+    void setSpanArpeggio(Arpeggio* a) { m_spanArpeggio = a; }
+    void undoChangeSpanArpeggio(Arpeggio* a);
+    TremoloDispatcher* tremoloDispatcher() const { return m_tremoloDispatcher; }
+    void setTremoloDispatcher(TremoloDispatcher* t, bool applyLogic = true);
 
     ChordLine* chordLine() const;
     bool endsGlissandoOrGuitarBend() const { return m_endsGlissando; }
@@ -177,8 +181,8 @@ public:
     const std::vector<Chord*>& graceNotes() const { return m_graceNotes; }
     std::vector<Chord*>& graceNotes() { return m_graceNotes; }
 
-    GraceNotesGroup& graceNotesBefore() const;
-    GraceNotesGroup& graceNotesAfter() const;
+    GraceNotesGroup& graceNotesBefore(bool filterUnplayable = false) const;
+    GraceNotesGroup& graceNotesAfter(bool filterUnplayable = false) const;
 
     size_t graceIndex() const { return m_graceIndex; }
     void setGraceIndex(size_t val) { m_graceIndex = val; }
@@ -210,6 +214,7 @@ public:
     void toGraceAfter();
 
     bool isPreBendOrGraceBendStart() const;
+    bool isGraceBendEnd() const;
     bool preOrGraceBendSpacingExceptionInTab() const;
 
     bool isTrillCueNote() const { return m_isTrillCueNote; }
@@ -341,8 +346,9 @@ private:
     Hook* m_hook = nullptr;
     StemSlash* m_stemSlash = nullptr;     // for acciacatura
 
-    Arpeggio* m_arpeggio = nullptr;
-    Tremolo* m_tremolo = nullptr;
+    Arpeggio* m_arpeggio = nullptr;       // arpeggio which starts on the chord
+    Arpeggio* m_spanArpeggio = nullptr;   // arpeggio which spans over this chord
+    TremoloDispatcher* m_tremoloDispatcher = nullptr;
     bool m_endsGlissando = false;        // true if this chord is the ending point of a glissando (needed for layout)
     std::vector<Chord*> m_graceNotes;    // storage for all grace notes
     mutable GraceNotesGroup m_graceNotesBefore = GraceNotesGroup(this); // will store before-chord grace notes

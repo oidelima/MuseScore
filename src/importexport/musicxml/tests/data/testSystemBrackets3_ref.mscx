@@ -24,6 +24,7 @@
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         <bracket type="0" span="1" col="0" visible="1"/>
         </Staff>
       <trackName>Backing
@@ -91,9 +92,10 @@ Vocals</longName>
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         <bracket type="0" span="6" col="0" visible="1"/>
         <bracket type="1" span="2" col="1" visible="1"/>
-        <barLineSpan>2</barLineSpan>
+        <barLineSpan>1</barLineSpan>
         </Staff>
       <Staff id="3">
         <StaffType group="tablature">
@@ -117,6 +119,7 @@ Vocals</longName>
           <showTabFingering>1</showTabFingering>
           <useNumbers>1</useNumbers>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         <barLineSpan>1</barLineSpan>
         </Staff>
       <trackName>Electric
@@ -220,6 +223,7 @@ Gtr. 1</shortName>
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         <bracket type="2" span="2" col="1" visible="1"/>
         <barLineSpan>1</barLineSpan>
         </Staff>
@@ -245,6 +249,7 @@ Gtr. 1</shortName>
           <showTabFingering>1</showTabFingering>
           <useNumbers>1</useNumbers>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         <barLineSpan>1</barLineSpan>
         </Staff>
       <trackName>Electric
@@ -348,6 +353,8 @@ Gtr. 2</shortName>
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
+        <bracket type="1" span="2" col="1" visible="1"/>
         <barLineSpan>1</barLineSpan>
         </Staff>
       <Staff id="7">
@@ -372,6 +379,7 @@ Gtr. 2</shortName>
           <showTabFingering>1</showTabFingering>
           <useNumbers>1</useNumbers>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         </Staff>
       <trackName>Acoustic
 Guitar</trackName>
@@ -460,6 +468,7 @@ Gtr.</shortName>
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         <bracket type="0" span="2" col="0" visible="1"/>
         <barLineSpan>1</barLineSpan>
         </Staff>
@@ -467,6 +476,7 @@ Gtr.</shortName>
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         </Staff>
       <trackName>Piano 2</trackName>
       <Instrument id="piano">
@@ -531,7 +541,6 @@ Gtr.</shortName>
     <Staff id="1">
       <VBox>
         <height>10</height>
-        <excludeFromParts>0</excludeFromParts>
         <Text>
           <style>title</style>
           <text>Sample</text>
@@ -596,6 +605,10 @@ Gtr.</shortName>
             <durationType>measure</durationType>
             <duration>1/1</duration>
             </Rest>
+          <BarLine>
+            <subtype>end</subtype>
+            <span>0</span>
+            </BarLine>
           </voice>
         </Measure>
       </Staff>
@@ -637,6 +650,10 @@ Gtr.</shortName>
             <durationType>measure</durationType>
             <duration>1/1</duration>
             </Rest>
+          <BarLine>
+            <subtype>end</subtype>
+            <span>0</span>
+            </BarLine>
           </voice>
         </Measure>
       </Staff>
@@ -678,6 +695,9 @@ Gtr.</shortName>
             <durationType>measure</durationType>
             <duration>1/1</duration>
             </Rest>
+          <BarLine>
+            <subtype>end</subtype>
+            </BarLine>
           </voice>
         </Measure>
       </Staff>
@@ -719,6 +739,9 @@ Gtr.</shortName>
             <durationType>measure</durationType>
             <duration>1/1</duration>
             </Rest>
+          <BarLine>
+            <subtype>end</subtype>
+            </BarLine>
           </voice>
         </Measure>
       </Staff>

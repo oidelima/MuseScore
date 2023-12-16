@@ -33,7 +33,7 @@ class System;
 class Chord;
 class TieSegment;
 class Tie;
-class Tremolo;
+class TremoloDispatcher;
 enum class Grip;
 class Note;
 }
@@ -63,12 +63,18 @@ private:
     static void correctForCrossStaff(Tie* tie, SlurTiePos& sPos);
     static void forceHorizontal(Tie* tie, SlurTiePos& sPos);
     static void adjustX(TieSegment* tieSegment, SlurTiePos& sPos, Grip startOrEnd);
-    static void adjustForLedgerLines(TieSegment* tieSegment, SlurTiePos& sPos);
+    static void adjustXforLedgerLines(TieSegment* tieSegment, bool start, Chord* chord, Note* note, const PointF& chordSystemPos,
+                                      double padding, double& resultingX);
+    static void adjustYforLedgerLines(TieSegment* tieSegment, SlurTiePos& sPos);
     static void adjustY(TieSegment* tieSegment);
+    static bool hasEndPointAboveNote(TieSegment* tieSegment);
+
     static TieSegment* layoutTieWithNoEndNote(Tie* item);
 
-    static double defaultStemLengthStart(Tremolo* tremolo);
-    static double defaultStemLengthEnd(Tremolo* tremolo);
+    static double defaultStemLengthStart(TremoloDispatcher* tremolo);
+    static double defaultStemLengthEnd(TremoloDispatcher* tremolo);
+
+    static bool isDirectionMixture(const Chord* c1, const Chord* c2, LayoutContext& ctx);
 
     static void layoutSegment(SlurSegment* item, LayoutContext& ctx, const PointF& p1, const PointF& p2);
 };

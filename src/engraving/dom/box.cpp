@@ -33,6 +33,7 @@
 #include "stafftext.h"
 #include "system.h"
 #include "text.h"
+#include "undo.h"
 
 #include "log.h"
 
@@ -52,7 +53,6 @@ static const ElementStyle hBoxStyle {
 Box::Box(const ElementType& type, System* parent)
     : MeasureBase(type, parent)
 {
-    setExcludeFromOtherParts(propertyDefault(Pid::EXCLUDE_FROM_OTHER_PARTS).toBool());
 }
 
 //---------------------------------------------------------
@@ -257,8 +257,6 @@ PropertyValue Box::propertyDefault(Pid id) const
         return 0.0;
     case Pid::BOX_AUTOSIZE:
         return true;
-    case Pid::EXCLUDE_FROM_OTHER_PARTS:
-        return true;
     default:
         return MeasureBase::propertyDefault(id);
     }
@@ -422,20 +420,83 @@ EngravingItem* Box::drop(EditData& data)
 
 void Box::manageExclusionFromParts(bool exclude)
 {
+    // manage Layout Breaks - remove old ones first
+    LayoutBreak* sectionBreak = sectionBreakElement();
+    if (sectionBreak) {
+        toEngravingItem(sectionBreak)->manageExclusionFromParts(true);
+    }
+
+    bool titleFrame = this == score()->first() && type() == ElementType::VBOX;
     if (exclude) {
-        EngravingItem::manageExclusionFromParts(exclude);
-    } else {
-        std::vector<MeasureBase*> newFrames;
-        for (Score* score : masterScore()->scoreList()) {
-            if (score == this->score()) {
+        const std::list<EngravingObject*> links = linkList();
+        for (EngravingObject* linkedObject : links) {
+            // Only remove title frame from score
+            if (linkedObject->score() == score() || (!this->score()->isMaster() && titleFrame && !linkedObject->score()->isMaster())) {
                 continue;
             }
-            MeasureBase* newMB = next()->getInScore(score, true);
-            MeasureBase* newFrame = score->insertBox(type(), newMB);
-            newFrame->setExcludeFromOtherParts(false);
-            newFrames.push_back(newFrame);
+            EngravingItem* linkedItem = toEngravingItem(linkedObject);
+            if (linkedItem->selected()) {
+                linkedItem->score()->deselect(linkedItem);
+            }
+            linkedItem->score()->undoRemoveElement(linkedItem, false);
+            linkedItem->undoUnlink();
         }
-        for (MeasureBase* newFrame : newFrames) {
+
+        // manage Layout Breaks - there are no linked boxes, so add linked Line Breaks to previous measure
+        if (sectionBreak && !titleFrame) {
+            if (MeasureBase* prevMeasure = this->prevMeasure()) {
+                for (Score* score : masterScore()->scoreList()) {
+                    if (score == this->score()) {
+                        continue;
+                    }
+                    if (MeasureBase* localPrevMeasure = score->tick2measure(prevMeasure->tick())) {
+                        EngravingItem* newSectionBreak = sectionBreak->linkedClone();
+                        newSectionBreak->setScore(score);
+                        newSectionBreak->setParent(localPrevMeasure);
+                        score->doUndoAddElement(newSectionBreak);
+                    }
+                }
+            }
+        }
+    } else {
+        for (Score* score : masterScore()->scoreList()) {
+            if (score == this->score() || (titleFrame && !this->score()->isMaster() && !score->isMaster())) {
+                continue;
+            }
+
+            MeasureBase* newMB = next()->getInScore(score, true);
+            Score::InsertMeasureOptions options;
+            options.cloneBoxToAllParts = false;
+            MeasureBase* newFrame = score->insertBox(type(), newMB, options);
+            newFrame->setExcludeFromOtherParts(false);
+
+            for (EngravingItem* item : el()) {
+                // Don't add instrument name from current part
+                if (item->isText() && toText(item)->textStyleType() == TextStyleType::INSTRUMENT_EXCERPT) {
+                    continue;
+                }
+                // add frame items (Layout Break, Title, ...)
+                newFrame->add(item->linkedClone());
+            }
+
+            if (isTBox()) {
+                Text* thisText = toTBox(this)->text();
+                Text* newText = toText(thisText->linkedClone());
+                toTBox(newFrame)->resetText(newText);
+            }
+
+            if (!score->isMaster() && newFrame == score->first() && newFrame->type() == ElementType::VBOX) {
+                // Title frame - add part name
+                String partLabel = score->name();
+                if (!partLabel.empty()) {
+                    Text* txt = Factory::createText(newFrame, TextStyleType::INSTRUMENT_EXCERPT);
+                    txt->setPlainText(partLabel);
+                    newFrame->add(txt);
+
+                    score->setMetaTag(u"partName", partLabel);
+                }
+            }
+
             newFrame->linkTo(this);
         }
     }
@@ -609,6 +670,15 @@ TBox::TBox(const TBox& tbox)
 TBox::~TBox()
 {
     delete m_text;
+}
+
+void TBox::resetText(Text* text)
+{
+    if (m_text) {
+        delete m_text;
+    }
+    m_text = text;
+    text->setParent(this);
 }
 
 //---------------------------------------------------------

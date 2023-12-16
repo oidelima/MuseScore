@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __TREMOLO_H__
-#define __TREMOLO_H__
+#ifndef MU_ENGRAVING_TREMOLO_H
+#define MU_ENGRAVING_TREMOLO_H
 
 #include <memory>
 
@@ -45,31 +45,38 @@ enum class TremoloStyle : signed char {
 //   @@ Tremolo
 //---------------------------------------------------------
 
-class Tremolo final : public EngravingItem
+class TremoloTwoChord;
+class TremoloSingleChord;
+class TremoloDispatcher final : public EngravingItem
 {
-    OBJECT_ALLOCATOR(engraving, Tremolo)
+    OBJECT_ALLOCATOR(engraving, TremoloDispatcher)
     DECLARE_CLASSOF(ElementType::TREMOLO)
 
 public:
 
-    Tremolo& operator=(const Tremolo&) = delete;
-    Tremolo* clone() const override { return new Tremolo(*this); }
+    TremoloDispatcher(Chord* parent);
+    TremoloDispatcher(const TremoloDispatcher&);
+
+    TremoloDispatcher& operator=(const TremoloDispatcher&) = delete;
+    TremoloDispatcher* clone() const override { return new TremoloDispatcher(*this); }
+    ~TremoloDispatcher() override;
+
+    void setTrack(track_idx_t val) override;
+
+    void setTremoloType(TremoloType t);
+    TremoloType tremoloType() const { return m_tremoloType; }
+    int subtype() const override { return static_cast<int>(m_tremoloType); }
+    TranslatableString subtypeUserName() const override;
+    bool isBuzzRoll() const { return m_tremoloType == TremoloType::BUZZ_ROLL; }
+    bool twoNotes() const;
 
     Chord* chord() const { return toChord(explicitParent()); }
     void setParent(Chord* ch);
 
-    int subtype() const override { return static_cast<int>(m_tremoloType); }
-    TranslatableString subtypeUserName() const override;
-
     void scanElements(void* data, void (* func)(void*, EngravingItem*), bool all=true) override;
 
-    void setTremoloType(TremoloType t);
-    TremoloType tremoloType() const { return m_tremoloType; }
-
-    DirectionV direction() const { return m_direction; }
-    void setDirection(DirectionV val) { m_direction = val; }
-
-    void setUserModified(DirectionV d, bool val);
+    DirectionV direction() const;
+    void setDirection(DirectionV val);
 
     double minHeight() const;
     void reset() override;
@@ -81,15 +88,11 @@ public:
 
     void layout2();
 
-    Chord* chord1() const { return m_chord1; }
-    void setChord1(Chord* ch) { m_chord1 = ch; }
-    Chord* chord2() const { return m_chord2; }
-    void setChord2(Chord* ch) { m_chord2 = ch; }
-    void setChords(Chord* c1, Chord* c2)
-    {
-        m_chord1 = c1;
-        m_chord2 = c2;
-    }
+    Chord* chord1() const;
+    void setChord1(Chord* ch);
+    Chord* chord2() const;
+    void setChord2(Chord* ch);
+    void setChords(Chord* c1, Chord* c2);
 
     PairF beamPos() const;
     double beamWidth() const;
@@ -99,13 +102,13 @@ public:
 
     bool userModified() const;
     void setUserModified(bool val);
+    void setUserModified(DirectionV d, bool val);
 
     Fraction tremoloLen() const;
-    bool isBuzzRoll() const { return m_tremoloType == TremoloType::BUZZ_ROLL; }
-    bool twoNotes() const { return m_tremoloType >= TremoloType::C8; }    // is it a two note tremolo?
-    int lines() const { return m_lines; }
-    bool up() const { return m_up; }
-    void setUp(bool up) { m_up = up; }
+
+    int lines() const;
+    bool up() const;
+    void setUp(bool up);
 
     bool placeMidStem() const;
 
@@ -114,25 +117,32 @@ public:
     void spatiumChanged(double oldValue, double newValue) override;
     void localSpatiumChanged(double oldValue, double newValue) override;
     void styleChanged() override;
-    PointF pagePos() const override;      ///< position in page coordinates
+    PointF pagePos() const override;
     String accessibleInfo() const override;
     void triggerLayout() const override;
 
-    TremoloStyle tremoloStyle() const { return m_style; }
-    void setTremoloStyle(TremoloStyle v) { m_style = v; }
-    void setBeamDirection(DirectionV v);
-    void setBeamFragment(const BeamFragment& bf) { m_beamFragment = bf; }
-    const BeamFragment& beamFragment() const { return m_beamFragment; }
-    BeamFragment& beamFragment() { return m_beamFragment; }
+    TremoloStyle tremoloStyle() const;
+    void setTremoloStyle(TremoloStyle v);
+    void setBeamFragment(const BeamFragment& bf);
+    const BeamFragment& beamFragment() const;
+    BeamFragment& beamFragment();
 
-    bool playTremolo() const { return m_playTremolo; }
-    void setPlayTremolo(bool v) { m_playTremolo = v; }
+    bool playTremolo() const;
+    void setPlayTremolo(bool v);
 
     bool customStyleApplicable() const;
 
     PropertyValue getProperty(Pid propertyId) const override;
     bool setProperty(Pid propertyId, const PropertyValue&) override;
     PropertyValue propertyDefault(Pid propertyId) const override;
+
+    void setColor(const mu::draw::Color& c) override;
+    mu::draw::Color color() const override;
+
+    const ElementStyle* styledProperties() const override;
+    PropertyFlags* propertyFlagsList() const override;
+    PropertyFlags propertyFlags(Pid) const override;
+    void setPropertyFlags(Pid, PropertyFlags) override;
 
     // only need grips for two-note trems
     bool needStartEditingAfterSelecting() const override;
@@ -146,52 +156,41 @@ public:
     void editDrag(EditData&) override;
 
     mu::draw::PainterPath basePath(double stretch = 0) const;
-    const mu::draw::PainterPath& path() const { return m_path; }
-    void setPath(const mu::draw::PainterPath& p) { m_path = p; }
+    const mu::draw::PainterPath& path() const;
+    void setPath(const mu::draw::PainterPath& p);
 
-    const mu::PointF& startAnchor() const { return m_startAnchor; }
-    mu::PointF& startAnchor() { return m_startAnchor; }
-    void setStartAnchor(const mu::PointF& p) { m_startAnchor = p; }
-    const mu::PointF& endAnchor() const { return m_endAnchor; }
-    mu::PointF& endAnchor() { return m_endAnchor; }
-    void setEndAnchor(const mu::PointF& p) { m_endAnchor = p; }
+    const mu::PointF& startAnchor() const;
+    mu::PointF& startAnchor();
+    void setStartAnchor(const mu::PointF& p);
+    const mu::PointF& endAnchor() const;
+    mu::PointF& endAnchor();
+    void setEndAnchor(const mu::PointF& p);
 
-    const std::vector<BeamSegment*>& beamSegments() const { return m_beamSegments; }
-    std::vector<BeamSegment*>& beamSegments() { return m_beamSegments; }
+    const std::vector<BeamSegment*>& beamSegments() const;
+    std::vector<BeamSegment*>& beamSegments();
+    void clearBeamSegments();
 
     void computeShape();
 
-    std::shared_ptr<rendering::dev::BeamTremoloLayout> layoutInfo;
+    std::shared_ptr<rendering::dev::BeamTremoloLayout> layoutInfo();
+    void setLayoutInfo(std::shared_ptr<rendering::dev::BeamTremoloLayout> info);
+
+    TremoloTwoChord* twoChord = nullptr;
+    TremoloSingleChord* singleChord = nullptr;
 
 private:
     friend class Factory;
+    friend class TremoloSingleChord;
+    friend class TremoloTwoChord;
 
-    Tremolo(Chord* parent);
-    Tremolo(const Tremolo&);
+    void setParentInternal(EngravingObject* p) override;
+    LayoutData* createLayoutData() const override;
+    const LayoutData* ldataInternal() const override;
+    LayoutData* mutldataInternal() override;
 
     void setBeamPos(const PairF& bp);
 
-    TremoloType m_tremoloType = TremoloType::R8;
-    Chord* m_chord1 = nullptr;
-    Chord* m_chord2 = nullptr;
-    TDuration m_durationType;
-    bool m_up = true;
-    bool m_userModified[2]{ false };                // 0: auto/down  1: up
-    DirectionV m_direction = DirectionV::AUTO;
-    mu::draw::PainterPath m_path;
-    std::vector<BeamSegment*> m_beamSegments;
-    bool m_playTremolo = true;
-
-    mu::PointF m_startAnchor;
-    mu::PointF m_endAnchor;
-
-    int m_lines = 0;         // derived from _subtype
-    TremoloStyle m_style = TremoloStyle::DEFAULT;
-    // for _startAnchor and _slope, once we decide to change trems so that they can
-    // continue from one system to the other (or indeed, one measure to the other)
-    // we will want a vector of fragments similar to Beam's _beamFragments structure.
-    // for now, a single fragment is sufficient
-    BeamFragment m_beamFragment;
+    TremoloType m_tremoloType = TremoloType::INVALID_TREMOLO;
 };
 } // namespace mu::engraving
 #endif

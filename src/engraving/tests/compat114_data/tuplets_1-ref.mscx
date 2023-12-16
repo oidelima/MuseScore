@@ -67,7 +67,6 @@
         <topMargin>5</topMargin>
         <bottomMargin>5</bottomMargin>
         <boxAutoSize>0</boxAutoSize>
-        <excludeFromParts>0</excludeFromParts>
         <Text>
           <style>title</style>
           <text>Tuplet 1.3 file</text>
@@ -134,7 +133,7 @@
             </Chord>
           <endTuplet/>
           <location>
-            <fractions>1/108</fractions>
+            <fractions>-43/2160</fractions>
             </location>
           <Rest>
             <dots>1</dots>
@@ -142,7 +141,7 @@
             </Rest>
           <endTuplet/>
           <location>
-            <fractions>-29/960</fractions>
+            <fractions>-1/960</fractions>
             </location>
           <Tuplet>
             <normalNotes>4</normalNotes>
@@ -202,12 +201,6 @@
           <endTuplet/>
           <location>
             <fractions>-11/960</fractions>
-            </location>
-          <Rest>
-            <durationType>half</durationType>
-            </Rest>
-          <location>
-            <fractions>-469/960</fractions>
             </location>
           <Rest>
             <durationType>half</durationType>

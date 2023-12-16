@@ -54,6 +54,7 @@
 #include "engraving/dom/tempotext.h"
 #include "engraving/dom/text.h"
 #include "engraving/dom/textbase.h"
+#include "engraving/dom/tremolo.h"
 #include "engraving/dom/tuplet.h"
 #include "engraving/dom/utils.h"
 
@@ -2327,6 +2328,20 @@ void Convert::pedalFromMEI(engraving::Pedal* pedal, const libmei::Pedal& meiPeda
         pedal->setEndHookType(engraving::HookType::HOOK_90);
     }
 
+    // @func
+    if (meiPedal.GetFunc() == "soft") {
+        // This is just for importing MEI files and will not be exported
+        if (pedal->beginText() != "") {
+            pedal->setBeginText(u"una corda");
+            pedal->setContinueText(u"");
+        }
+    } else if (meiPedal.GetFunc() == "sostenuto") {
+        if (pedal->beginText() != "") {
+            pedal->setBeginText(u"<sym>keyboardPedalSost</sym>");
+            pedal->setContinueText(u"(<sym>keyboardPedalSost</sym>)");
+        }
+    }
+
     // @color
     Convert::colorlineFromMEI(pedal, meiPedal);
 }
@@ -2338,7 +2353,7 @@ libmei::Pedal Convert::pedalToMEI(const engraving::Pedal* pedal)
     // @dir
     meiPedal.SetDir(libmei::pedalLog_DIR_down);
 
-    bool symbol = (pedal->beginText() == engraving::Pedal::PEDAL_SYMBOL);
+    bool symbol = (!pedal->beginText().isEmpty());
     bool star = (pedal->endText() == engraving::Pedal::STAR_SYMBOL);
 
     // @form
@@ -2348,6 +2363,11 @@ libmei::Pedal Convert::pedalToMEI(const engraving::Pedal* pedal)
         meiPedal.SetForm(libmei::PEDALSTYLE_pedline);
     } else {
         meiPedal.SetForm(libmei::PEDALSTYLE_line);
+    }
+
+    // @func
+    if (pedal->beginText() == u"<sym>keyboardPedalSost</sym>" || pedal->beginText() == u"<sym>keyboardPedalS</sym>") {
+        meiPedal.SetFunc("sostenuto");
     }
 
     // @color
@@ -2431,7 +2451,7 @@ std::pair<libmei::Note, libmei::Accid> Convert::pitchToMEI(const engraving::Note
     int alterInt  = tpc2alterByKey(pitch.tpc2, engraving::Key::C);
 
     // @oct
-    // We need to ajusted the pitch to its transpossed value for the octave calculation
+    // We need to adjust the pitch to its transposed value for the octave calculation
     int oct = ((pitch.pitch - interval.chromatic - alterInt) / 12) - 1;
     meiNote.SetOct(oct);
 
@@ -2626,6 +2646,32 @@ std::pair<libmei::data_STEMDIRECTION, double> Convert::stemToMEI(const engraving
     }
 
     return { meiStemDir, meiStemLen };
+}
+
+engraving::TremoloType Convert::stemModFromMEI(const libmei::data_STEMMODIFIER meiStemMod)
+{
+    switch (meiStemMod) {
+    case libmei::STEMMODIFIER_1slash:  return engraving::TremoloType::R8;
+    case libmei::STEMMODIFIER_2slash: return engraving::TremoloType::R16;
+    case libmei::STEMMODIFIER_3slash: return engraving::TremoloType::R32;
+    case libmei::STEMMODIFIER_4slash: return engraving::TremoloType::R64;
+    case libmei::STEMMODIFIER_z: return engraving::TremoloType::BUZZ_ROLL;
+    default:
+        return engraving::TremoloType::INVALID_TREMOLO;
+    }
+}
+
+libmei::data_STEMMODIFIER Convert::stemModToMEI(const engraving::TremoloDispatcher* tremolo)
+{
+    switch (tremolo->tremoloType()) {
+    case engraving::TremoloType::R8:  return libmei::STEMMODIFIER_1slash;
+    case engraving::TremoloType::R16: return libmei::STEMMODIFIER_2slash;
+    case engraving::TremoloType::R32: return libmei::STEMMODIFIER_3slash;
+    case engraving::TremoloType::R64: return libmei::STEMMODIFIER_4slash;
+    case engraving::TremoloType::BUZZ_ROLL: return libmei::STEMMODIFIER_z;
+    default:
+        return libmei::STEMMODIFIER_NONE;
+    }
 }
 
 void Convert::sylFromMEI(engraving::Lyrics* lyrics, const libmei::Syl& meiSyl, ElisionType elision, bool& warning)

@@ -1045,10 +1045,10 @@ bool GuitarPro5::read(IODevice* io)
                 Segment* s = measure->getSegment(SegmentType::KeySig, measure->tick());
                 StaffText* st = new StaffText(s);
                 static constexpr char text[][22] = {
-                    "fine", "Da Capo", "D.C. al Coda", "D.C. al Double Coda",
-                    "D.C. al Fine", "Da Segno", "D.S. al Coda", "D.S. al Double Coda",
-                    "D.S. al Fine", "Da Segno Segno", "D.S.S. al Coda", "D.S.S. al Double Coda",
-                    "D.S.S. al Fine", "Da Coda", "Da Double Coda"
+                    "fine", "Da Capo", "D.C. al Coda", "D.C. al Doppia Coda",
+                    "D.C. al Fine", "Da Segno", "D.S. al Coda", "D.S. al Doppia Coda",
+                    "D.S. al Fine", "Da Doppio Segno", "D.D.S. al Coda", "D.D.S. al Doppia Coda",
+                    "D.D.S. al Fine", "Da Coda", "Da Doppia Coda"
                 };
                 st->setPlainText(String::fromAscii(text[i - 4]));
                 st->setParent(s);
@@ -1164,7 +1164,7 @@ GuitarPro::ReadNoteResult GuitarPro5::readNoteEffects(Note* note)
     if (modMask2 & EFFECT_TREMOLO) {      // tremolo picking length
         int tremoloDivision = readUInt8();
         Chord* chord = note->chord();
-        Tremolo* t = Factory::createTremolo(chord);
+        TremoloDispatcher* t = Factory::createTremoloDispatcher(chord);
         if (tremoloDivision >= 1 && tremoloDivision <= 3) {
             TremoloType type = tremoloType(tremoloDivision);
             t->setTremoloType(type);
@@ -1535,7 +1535,7 @@ GuitarPro::ReadNoteResult GuitarPro5::readNote(int string, Note* note)
                         note->setPitch(note2->pitch());
                         true_note = note2;
                         if (m_tremolosInChords.find(chord2) != m_tremolosInChords.end()) {
-                            Tremolo* t = Factory::createTremolo(score->dummy()->chord());
+                            TremoloDispatcher* t = Factory::createTremoloDispatcher(score->dummy()->chord());
                             TremoloType type = m_tremolosInChords.at(chord2);
                             t->setTremoloType(type);
                             chord->add(t);

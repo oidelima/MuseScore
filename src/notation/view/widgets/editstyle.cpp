@@ -590,6 +590,7 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::staffTextMinDistance,    false, staffTextMinDistance,  resetStaffTextMinDistance },
 
         { StyleId::guitarBendLineWidth,     false, bendLineWidth,     resetBendLineWidth },
+        { StyleId::guitarBendLineWidthTab,  false, bendLineWidthTab,  resetBendLineWidthTab },
         { StyleId::guitarBendArrowWidth,    false, bendArrowWidth,    resetBendArrowWidth },
         { StyleId::guitarBendArrowHeight,   false, bendArrowHeight,   resetBendArrowHeight },
         { StyleId::useCueSizeFretForGraceBends, false, guitarBendCueSizedGraceFrets, 0 },
@@ -1421,6 +1422,11 @@ QString EditStyle::pageCodeForElement(const EngravingItem* element)
         return "vibrato";
 
     case ElementType::BEND:
+    case ElementType::GUITAR_BEND:
+    case ElementType::GUITAR_BEND_SEGMENT:
+    case ElementType::GUITAR_BEND_HOLD:
+    case ElementType::GUITAR_BEND_HOLD_SEGMENT:
+    case ElementType::GUITAR_BEND_TEXT:
         return "bend";
 
     case ElementType::TEXTLINE:

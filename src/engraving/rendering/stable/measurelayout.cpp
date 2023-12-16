@@ -1258,7 +1258,7 @@ void MeasureLayout::layoutMeasureElements(Measure* m, LayoutContext& ctx)
                         w = x2 - x1 - d;
                     }
                     MMRest::LayoutData* mmrestLD = mmrest->mutldata();
-                    mmrestLD->setRestWidth(w);
+                    mmrestLD->restWidth = w;
                     TLayout::layoutMMRest(mmrest, mmrest->mutldata(), ctx);
                     mmrestLD->setPosX(headerException ? (x1 - s.x()) : (x1 - s.x() + d));
                 } else if (e->isMeasureRepeat() && !(toMeasureRepeat(e)->numMeasures() % 2)) {
@@ -1286,8 +1286,8 @@ void MeasureLayout::layoutMeasureElements(Measure* m, LayoutContext& ctx)
                 e->mutldata()->setPosX(0);
             } else if (e->isChord()) {
                 Chord* c = toChord(e);
-                if (c->tremolo()) {
-                    Tremolo* tr = c->tremolo();
+                if (c->tremoloDispatcher()) {
+                    TremoloDispatcher* tr = c->tremoloDispatcher();
                     Chord* c1 = tr->chord1();
                     Chord* c2 = tr->chord2();
                     if (!tr->twoNotes() || (c1 && !c1->staffMove() && c2 && !c2->staffMove())) {
@@ -1295,8 +1295,8 @@ void MeasureLayout::layoutMeasureElements(Measure* m, LayoutContext& ctx)
                     }
                 }
                 for (Chord* g : c->graceNotes()) {
-                    if (g->tremolo()) {
-                        Tremolo* tr = g->tremolo();
+                    if (g->tremoloDispatcher()) {
+                        TremoloDispatcher* tr = g->tremoloDispatcher();
                         Chord* c1 = tr->chord1();
                         Chord* c2 = tr->chord2();
                         if (!tr->twoNotes() || (c1 && !c1->staffMove() && c2 && !c2->staffMove())) {
@@ -1342,7 +1342,7 @@ void MeasureLayout::layoutCrossStaff(MeasureBase* mb, LayoutContext& ctx)
             if (e->isChord()) {
                 Chord* c = toChord(e);
                 Beam* beam = c->beam();
-                Tremolo* tremolo = c->tremolo();
+                TremoloDispatcher* tremolo = c->tremoloDispatcher();
                 if ((beam && (beam->cross() || beam->userModified()))
                     || (tremolo && tremolo->twoNotes() && tremolo->userModified())) {
                     bool prevUp = c->up();
@@ -2067,7 +2067,7 @@ void MeasureLayout::stretchMeasureInPracticeMode(Measure* m, double targetWidth,
                     double d = ctx.conf().styleMM(Sid::multiMeasureRestMargin);
                     double w = x2 - x1 - 2 * d;
 
-                    mmrest->mutldata()->setRestWidth(w);
+                    mmrest->mutldata()->restWidth = w;
                     TLayout::layoutMMRest(mmrest, mmrest->mutldata(), ctx);
                     e->setPos(x1 - s.x() + d, e->staff()->staffHeight() * .5);   // center vertically in measure
                     s.createShape(staffIdx);
@@ -2082,8 +2082,8 @@ void MeasureLayout::stretchMeasureInPracticeMode(Measure* m, double targetWidth,
                 e->mutldata()->setPosX(0);
             } else if (t == ElementType::CHORD) {
                 Chord* c = toChord(e);
-                if (c->tremolo()) {
-                    Tremolo* tr = c->tremolo();
+                if (c->tremoloDispatcher()) {
+                    TremoloDispatcher* tr = c->tremoloDispatcher();
                     Chord* c1 = tr->chord1();
                     Chord* c2 = tr->chord2();
                     if (!tr->twoNotes() || (c1 && !c1->staffMove() && c2 && !c2->staffMove())) {

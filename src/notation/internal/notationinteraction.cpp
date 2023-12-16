@@ -1207,7 +1207,7 @@ bool NotationInteraction::startDrop(const QUrl& url)
     m_dropData.ed.dragOffset = QPointF();
     m_dropData.ed.dropElement->setParent(nullptr);
 
-    mu::engraving::EngravingItem::renderer()->layoutItem(m_dropData.ed.dropElement);
+    engravingRenderer()->layoutItem(m_dropData.ed.dropElement);
 
     return true;
 }
@@ -1581,7 +1581,8 @@ bool NotationInteraction::applyPaletteElement(mu::engraving::EngravingItem* elem
         bool elementIsStandardBend = element->isActionIcon() && toActionIcon(element)->actionType() == ActionIconType::STANDARD_BEND;
         bool isLineNoteToNote = (element->isGlissando() || elementIsStandardBend)
                                 && sel.isList() && sel.elements().size() == 2
-                                && sel.elements()[0]->isNote() && sel.elements()[1]->isNote();
+                                && sel.elements()[0]->isNote() && sel.elements()[1]->isNote()
+                                && sel.elements()[1]->tick() != sel.elements()[0]->tick();
 
         if (isEntryDrumStaff() && element->isChord()) {
             mu::engraving::InputState& is = score->inputState();
@@ -1955,6 +1956,9 @@ void NotationInteraction::applyDropPaletteElement(mu::engraving::Score* score, m
 
         if (el && !score->inputState().noteEntryMode()) {
             doSelect({ el }, mu::engraving::SelectType::SINGLE, 0);
+            if (el->needStartEditingAfterSelecting()) {
+                startEditElement(el);
+            }
         }
         dropData->dropElement = nullptr;
 
@@ -2688,9 +2692,9 @@ void NotationInteraction::swapChordRest(MoveDirection direction)
         if (cr1 && cr2 && cr1->measure() == cr2->measure() && !cr1->tuplet() && !cr2->tuplet()
             && cr1->durationType() == cr2->durationType() && cr1->ticks() == cr2->ticks()
             // if two chords belong to different two-note tremolos, abort
-            && !(cr1->isChord() && toChord(cr1)->tremolo() && toChord(cr1)->tremolo()->twoNotes()
-                 && cr2->isChord() && toChord(cr2)->tremolo() && toChord(cr2)->tremolo()->twoNotes()
-                 && toChord(cr1)->tremolo() != toChord(cr2)->tremolo())) {
+            && !(cr1->isChord() && toChord(cr1)->tremoloDispatcher() && toChord(cr1)->tremoloDispatcher()->twoNotes()
+                 && cr2->isChord() && toChord(cr2)->tremoloDispatcher() && toChord(cr2)->tremoloDispatcher()->twoNotes()
+                 && toChord(cr1)->tremoloDispatcher() != toChord(cr2)->tremoloDispatcher())) {
             score()->undo(new mu::engraving::SwapCR(cr1, cr2));
         }
     }
@@ -3622,6 +3626,8 @@ mu::Ret NotationInteraction::repeatSelection()
             ChordRest* cr = toChordRest(e);
             score()->pasteStaff(xml, cr->segment(), cr->staffIdx());
             apply();
+
+            showItem(cr);
         }
     }
 
@@ -4216,6 +4222,9 @@ void NotationInteraction::addImageToItem(const io::path_t& imagePath, EngravingI
         { "jpg", ImageType::RASTER },
         { "jpeg", ImageType::RASTER },
         { "png", ImageType::RASTER },
+        { "bmp", ImageType::RASTER },
+        { "tif", ImageType::RASTER },
+        { "tiff", ImageType::RASTER },
     };
 
     io::path_t suffix = io::suffix(imagePath);
@@ -5441,12 +5450,10 @@ void NotationInteraction::addLyricsVerse()
 
 mu::Ret NotationInteraction::canAddGuitarBend() const
 {
-    static const std::set<ElementType> requiredTypes {
-        ElementType::NOTE
-    };
+    Score* score = this->score();
+    bool canAdd = score && score->selection().noteList().size() > 0;
 
-    bool isNoteSelected = elementsSelected(requiredTypes);
-    return isNoteSelected ? make_ok() : make_ret(Err::NoteIsNotSelected);
+    return canAdd ? make_ok() : make_ret(Err::NoteIsNotSelected);
 }
 
 void NotationInteraction::addGuitarBend(GuitarBendType bendType)
@@ -5468,10 +5475,27 @@ void NotationInteraction::addGuitarBend(GuitarBendType bendType)
 
     startEdit();
 
-    Note* note = noteList.front();
-    Note* endNote = noteList.back() != note ? noteList.back() : nullptr;
+    Note* startNote = nullptr;
+    Note* endNote = nullptr;
+    bool noteToNote = false;
+    if (selection.isList() && noteList.size() == 2) {
+        startNote = noteList.front();
+        endNote = noteList.back();
+        if (endNote->tick() > startNote->tick()) {
+            noteToNote = true;
+        }
+    }
 
-    mu::engraving::GuitarBend* guitarBend = score->addGuitarBend(bendType, note, endNote);
+    mu::engraving::GuitarBend* guitarBend = nullptr;
+    if (noteToNote) {
+        guitarBend = score->addGuitarBend(bendType, startNote, endNote);
+    } else {
+        for (Note* note : noteList) {
+            // (will select the last one)
+            guitarBend = score->addGuitarBend(bendType, note, nullptr);
+        }
+    }
+
     if (guitarBend) {
         apply();
         select({ guitarBend });
@@ -5566,6 +5590,23 @@ void NotationInteraction::toggleFontStyle(mu::engraving::FontStyle style)
     notifyAboutTextEditingChanged();
 }
 
+void NotationInteraction::toggleVerticalAlignment(VerticalAlignment align)
+{
+    if (!m_editData.element || !m_editData.element->isTextBase()) {
+        LOGW("toggleVerticalAlignment called with invalid current element");
+        return;
+    }
+    mu::engraving::TextBase* text = toTextBase(m_editData.element);
+    int ialign = static_cast<int>(align);
+    int currentAlign = text->getProperty(mu::engraving::Pid::TEXT_SCRIPT_ALIGN).toInt();
+    score()->startCmd();
+    text->undoChangeProperty(mu::engraving::Pid::TEXT_SCRIPT_ALIGN, PropertyValue::fromValue(
+                                 (currentAlign == ialign) ? static_cast<int>(VerticalAlignment::AlignNormal) : ialign),
+                             mu::engraving::PropertyFlags::UNSTYLED);
+    score()->endCmd();
+    notifyAboutTextEditingChanged();
+}
+
 void NotationInteraction::toggleBold()
 {
     toggleFontStyle(mu::engraving::FontStyle::Bold);
@@ -5584,6 +5625,16 @@ void NotationInteraction::toggleUnderline()
 void NotationInteraction::toggleStrike()
 {
     toggleFontStyle(mu::engraving::FontStyle::Strike);
+}
+
+void NotationInteraction::toggleSubScript()
+{
+    toggleVerticalAlignment(VerticalAlignment::AlignSubScript);
+}
+
+void NotationInteraction::toggleSuperScript()
+{
+    toggleVerticalAlignment(VerticalAlignment::AlignSuperScript);
 }
 
 template<typename P>

@@ -107,6 +107,7 @@ enum class ElementType {
     HOOK,
     LYRICS,
     FIGURED_BASS,
+    FIGURED_BASS_ITEM,
     MARKER,
     JUMP,
     FINGERING,
@@ -149,7 +150,7 @@ enum class ElementType {
     STAFF_STATE,
     NOTEHEAD,
     NOTEDOT,
-    TREMOLO,
+    TREMOLO, // deprecated
     IMAGE,
     MEASURE,
     SELECTION,
@@ -200,6 +201,8 @@ enum class ElementType {
     GUITAR_BEND_HOLD,
     GUITAR_BEND_HOLD_SEGMENT,
     GUITAR_BEND_TEXT,
+    TREMOLO_TWOCHORD,
+    TREMOLO_SINGLECHORD,
 
     ROOT_ITEM,
     DUMMY,
@@ -908,6 +911,11 @@ enum class TremoloType : signed char {
     R8 = 0, R16, R32, R64, BUZZ_ROLL,    // one note tremolo (repeat)
     C8, C16, C32, C64       // two note tremolo (change)
 };
+
+inline bool isTremoloTwoChord(TremoloType type)
+{
+    return type >= TremoloType::C8;
+}
 
 enum class BracketType : signed char {
     NORMAL, BRACE, SQUARE, LINE, NO_BRACKET = -1

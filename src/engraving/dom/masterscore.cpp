@@ -60,16 +60,16 @@ MasterScore::MasterScore(std::weak_ptr<engraving::EngravingProject> project)
     : Score()
 {
     m_project = project;
-    _undoStack   = new UndoStack();
-    _tempomap    = new TempoMap;
-    _sigmap      = new TimeSigMap();
-    _expandedRepeatList  = new RepeatList(this);
-    _nonExpandedRepeatList = new RepeatList(this);
+    m_undoStack   = new UndoStack();
+    m_tempomap    = new TempoMap;
+    m_sigmap      = new TimeSigMap();
+    m_expandedRepeatList  = new RepeatList(this);
+    m_nonExpandedRepeatList = new RepeatList(this);
     setMasterScore(this);
 
-    _pos[int(POS::CURRENT)] = Fraction(0, 1);
-    _pos[int(POS::LEFT)]    = Fraction(0, 1);
-    _pos[int(POS::RIGHT)]   = Fraction(0, 1);
+    m_pos[int(POS::CURRENT)] = Fraction(0, 1);
+    m_pos[int(POS::LEFT)]    = Fraction(0, 1);
+    m_pos[int(POS::RIGHT)]   = Fraction(0, 1);
 
 #if defined(Q_OS_WIN)
     metaTags().insert({ u"platform", u"Microsoft Windows" });
@@ -105,12 +105,12 @@ MasterScore::~MasterScore()
         m_project.lock()->m_masterScore = nullptr;
     }
 
-    delete _expandedRepeatList;
-    delete _nonExpandedRepeatList;
-    delete _sigmap;
-    delete _tempomap;
-    delete _undoStack;
-    DeleteAll(_excerpts);
+    delete m_expandedRepeatList;
+    delete m_nonExpandedRepeatList;
+    delete m_sigmap;
+    delete m_tempomap;
+    delete m_undoStack;
+    DeleteAll(m_excerpts);
 }
 
 //---------------------------------------------------------
@@ -119,8 +119,8 @@ MasterScore::~MasterScore()
 
 void MasterScore::setTempomap(TempoMap* tm)
 {
-    delete _tempomap;
-    _tempomap = tm;
+    delete m_tempomap;
+    m_tempomap = tm;
 }
 
 //---------------------------------------------------------
@@ -158,9 +158,9 @@ String MasterScore::name() const
 
 void MasterScore::setPlaylistDirty()
 {
-    _playlistDirty = true;
-    _expandedRepeatList->setScoreChanged();
-    _nonExpandedRepeatList->setScoreChanged();
+    m_playlistDirty = true;
+    m_expandedRepeatList->setScoreChanged();
+    m_nonExpandedRepeatList->setScoreChanged();
 }
 
 //---------------------------------------------------------
@@ -169,10 +169,10 @@ void MasterScore::setPlaylistDirty()
 
 void MasterScore::setExpandRepeats(bool expand)
 {
-    if (_expandRepeats == expand) {
+    if (m_expandRepeats == expand) {
         return;
     }
-    _expandRepeats = expand;
+    m_expandRepeats = expand;
     setPlaylistDirty();
 }
 
@@ -183,14 +183,14 @@ void MasterScore::setExpandRepeats(bool expand)
 
 void MasterScore::updateRepeatListTempo()
 {
-    _expandedRepeatList->updateTempo();
-    _nonExpandedRepeatList->updateTempo();
+    m_expandedRepeatList->updateTempo();
+    m_nonExpandedRepeatList->updateTempo();
 }
 
 void MasterScore::updateRepeatList()
 {
-    _expandedRepeatList->update(true);
-    _nonExpandedRepeatList->update(false);
+    m_expandedRepeatList->update(true);
+    m_nonExpandedRepeatList->update(false);
 }
 
 //---------------------------------------------------------
@@ -199,24 +199,24 @@ void MasterScore::updateRepeatList()
 
 const RepeatList& MasterScore::repeatList() const
 {
-    if (_expandRepeats) {
-        _expandedRepeatList->update(true);
-        return *_expandedRepeatList;
+    if (m_expandRepeats) {
+        m_expandedRepeatList->update(true);
+        return *m_expandedRepeatList;
     }
 
-    _nonExpandedRepeatList->update(false);
-    return *_nonExpandedRepeatList;
+    m_nonExpandedRepeatList->update(false);
+    return *m_nonExpandedRepeatList;
 }
 
 const RepeatList& MasterScore::repeatList(bool expandRepeats) const
 {
     if (expandRepeats) {
-        _expandedRepeatList->update(true);
-        return *_expandedRepeatList;
+        m_expandedRepeatList->update(true);
+        return *m_expandedRepeatList;
     }
 
-    _nonExpandedRepeatList->update(false);
-    return *_nonExpandedRepeatList;
+    m_nonExpandedRepeatList->update(false);
+    return *m_nonExpandedRepeatList;
 }
 
 //---------------------------------------------------------
@@ -295,7 +295,7 @@ void MasterScore::setPos(POS pos, Fraction tick)
         tick = lastMeasure()->endTick();
     }
 
-    _pos[int(pos)] = tick;
+    m_pos[int(pos)] = tick;
     // even though tick position might not have changed, layout might have
     // so we should update cursor here
     // however, we must be careful not to call setPos() again while handling posChanged, or recursion results
@@ -310,7 +310,7 @@ void MasterScore::setPos(POS pos, Fraction tick)
 
 void MasterScore::setUpdateAll()
 {
-    _cmdState.setUpdateMode(UpdateMode::UpdateAll);
+    m_cmdState.setUpdateMode(UpdateMode::UpdateAll);
 }
 
 //---------------------------------------------------------
@@ -319,17 +319,17 @@ void MasterScore::setUpdateAll()
 
 void MasterScore::setLayoutAll(staff_idx_t staff, const EngravingItem* e)
 {
-    _cmdState.setTick(Fraction(0, 1));
-    _cmdState.setTick(measures()->last() ? measures()->last()->endTick() : Fraction(0, 1));
+    m_cmdState.setTick(Fraction(0, 1));
+    m_cmdState.setTick(measures()->last() ? measures()->last()->endTick() : Fraction(0, 1));
 
     if (e && e->score() == this) {
         // TODO: map staff number properly
         const staff_idx_t startStaff = staff == mu::nidx ? 0 : staff;
         const staff_idx_t endStaff = staff == mu::nidx ? (nstaves() - 1) : staff;
-        _cmdState.setStaff(startStaff);
-        _cmdState.setStaff(endStaff);
+        m_cmdState.setStaff(startStaff);
+        m_cmdState.setStaff(endStaff);
 
-        _cmdState.setElement(e);
+        m_cmdState.setElement(e);
     }
 }
 
@@ -340,31 +340,31 @@ void MasterScore::setLayoutAll(staff_idx_t staff, const EngravingItem* e)
 void MasterScore::setLayout(const Fraction& t, staff_idx_t staff, const EngravingItem* e)
 {
     if (t >= Fraction(0, 1)) {
-        _cmdState.setTick(t);
+        m_cmdState.setTick(t);
     }
 
     if (e && e->score() == this) {
         // TODO: map staff number properly
-        _cmdState.setStaff(staff);
-        _cmdState.setElement(e);
+        m_cmdState.setStaff(staff);
+        m_cmdState.setElement(e);
     }
 }
 
 void MasterScore::setLayout(const Fraction& tick1, const Fraction& tick2, staff_idx_t staff1, staff_idx_t staff2, const EngravingItem* e)
 {
     if (tick1 >= Fraction(0, 1)) {
-        _cmdState.setTick(tick1);
+        m_cmdState.setTick(tick1);
     }
     if (tick2 >= Fraction(0, 1)) {
-        _cmdState.setTick(tick2);
+        m_cmdState.setTick(tick2);
     }
 
     if (e && e->score() == this) {
         // TODO: map staff number properly
-        _cmdState.setStaff(staff1);
-        _cmdState.setStaff(staff2);
+        m_cmdState.setStaff(staff1);
+        m_cmdState.setStaff(staff2);
 
-        _cmdState.setElement(e);
+        m_cmdState.setElement(e);
     }
 }
 
@@ -374,14 +374,14 @@ void MasterScore::setLayout(const Fraction& tick1, const Fraction& tick2, staff_
 
 void MasterScore::setPlaybackScore(Score* score)
 {
-    if (_playbackScore == score) {
+    if (m_playbackScore == score) {
         return;
     }
 
-    _playbackScore = score;
-    _playbackSettingsLinks.clear();
+    m_playbackScore = score;
+    m_playbackSettingsLinks.clear();
 
-    if (!_playbackScore) {
+    if (!m_playbackScore) {
         return;
     }
 
@@ -393,7 +393,7 @@ void MasterScore::setPlaybackScore(Score* score)
                 IF_ASSERT_FAILED(pChannel) {
                     continue;
                 }
-                _playbackSettingsLinks.emplace_back(pChannel, ch, /* excerpt */ true);
+                m_playbackSettingsLinks.emplace_back(pChannel, ch, /* excerpt */ true);
             }
         }
     }
@@ -498,12 +498,18 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
         tick = last() ? last()->endTick() : Fraction(0, 1);
     }
 
-    const Fraction currentTimeSig = sigmap()->timesig(tick.ticks()).nominal();   // use nominal time signature of current measure
-    Measure* masterMeasure = nullptr;
-    Fraction ticks   = { 0, 1 };
-
-    MeasureBase* result = nullptr;
     const bool isBeginning = tick.isZero();
+
+    // Use nominal time signature of current or previous measure, depending on whether
+    // the time sig from `beforeMeasure` will be moved to the newly created measure
+    const Fraction currentTimeSig
+        = sigmap()->timesig(!options.moveSignaturesClef && !isBeginning && beforeMeasure && beforeMeasure->prevMeasure()
+                            ? beforeMeasure->prevMeasure()->tick()
+                            : tick)
+          .nominal();
+
+    Measure* masterMeasure = nullptr;
+    Fraction ticks = { 0, 1 };
 
     for (Score* score : scoreList()) {
         MeasureBase* actualBeforeMeasure = nullptr;
@@ -529,22 +535,20 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
             }
         }
 
-        MeasureBase* newMeasureBase = toMeasureBase(Factory::createMeasure(score->dummy()->system()));
-        newMeasureBase->setTick(tick);
+        Measure* newMeasure = Factory::createMeasure(score->dummy()->system());
+        newMeasure->setTick(tick);
 
         if (actualBeforeMeasure) {
             actualBeforeMeasure = actualBeforeMeasure->top(); // don't try to insert in front of nested frame
         }
-        newMeasureBase->setNext(actualBeforeMeasure);
-        newMeasureBase->setPrev(actualBeforeMeasure ? actualBeforeMeasure->prev() : score->last());
-        if (newMeasureBase->isMeasure()) {
-            Measure* m = toMeasure(newMeasureBase);
-            m->setTimesig(currentTimeSig);
-            m->setTicks(currentTimeSig);
-        }
-        undo(new InsertMeasures(newMeasureBase, newMeasureBase));
+        newMeasure->setNext(actualBeforeMeasure);
+        newMeasure->setPrev(actualBeforeMeasure ? actualBeforeMeasure->prev() : score->last());
 
-        Measure* newMeasure  = toMeasure(newMeasureBase); // new measure
+        newMeasure->setTimesig(currentTimeSig);
+        newMeasure->setTicks(currentTimeSig);
+
+        undo(new InsertMeasures(newMeasure, newMeasure));
+
         ticks = newMeasure->ticks();
         Measure* measureInsert = nullptr; // insert before
         if (actualBeforeMeasure) {
@@ -556,7 +560,6 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
         }
 
         if (score->isMaster()) {
-            result = newMeasureBase;
             masterMeasure = newMeasure;
         }
 
@@ -582,7 +585,7 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
                         EngravingItem* pc = ps->element(staffIdx * VOICES);
                         if (pc) {
                             previousClefList.push_back(toClef(pc));
-                            undo(new RemoveElement(pc));
+                            doUndoRemoveElement(pc);
                             if (ps->empty()) {
                                 undoRemoveElement(ps);
                             }
@@ -647,7 +650,7 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
                             ee = e;
                         }
                         if (ee) {
-                            undo(new RemoveElement(ee));
+                            doUndoRemoveElement(ee);
                             if (s->empty()) {
                                 undoRemoveElement(s);
                             }
@@ -673,7 +676,7 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
                     EngravingItem* pb = pbs->element(staffIdx * VOICES);
                     if (pb && !pb->generated()) {
                         previousBarLinesList.push_back(toBarLine(pb));
-                        undo(new RemoveElement(pb));
+                        doUndoRemoveElement(pb);
                         if (pbs->empty()) {
                             pbs->setEnabled(false);
                         }
@@ -750,5 +753,5 @@ MeasureBase* MasterScore::insertMeasure(MeasureBase* beforeMeasure, const Insert
         deselectAll();
     }
 
-    return result;
+    return masterMeasure;
 }

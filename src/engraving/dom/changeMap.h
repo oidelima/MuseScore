@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __CHANGEMAP_H__
-#define __CHANGEMAP_H__
+#ifndef MU_ENGRAVING_CHANGEMAP_H
+#define MU_ENGRAVING_CHANGEMAP_H
 
 #include <map>
 
@@ -45,25 +45,26 @@ enum class ChangeEventType : char {
 
 class ChangeEvent
 {
-    int value { 0 };
-    ChangeEventType type { ChangeEventType::INVALID };
-    Fraction length;
-    ChangeMethod method { ChangeMethod::NORMAL };
-    ChangeDirection direction { ChangeDirection::INCREASING };
-    int cachedStartVal   { -1 };
-    int cachedEndVal     { -1 };
-
 public:
     ChangeEvent() {}
-    ChangeEvent(int vel)
-        : value(vel), type(ChangeEventType::FIX) {}
+    ChangeEvent(int val)
+        : m_value(val), m_type(ChangeEventType::FIX) {}
     ChangeEvent(Fraction s, Fraction e, int diff, ChangeMethod m, ChangeDirection d)
-        : value(diff), type(ChangeEventType::RAMP), length(e - s), method(m), direction(d) {}
+        : m_value(diff), m_type(ChangeEventType::RAMP), m_length(e - s), m_method(m), m_direction(d) {}
 
     bool operator==(const ChangeEvent& event) const;
     bool operator!=(const ChangeEvent& event) const { return !(operator==(event)); }
 
+private:
     friend class ChangeMap;
+
+    int m_value = 0;
+    ChangeEventType m_type = ChangeEventType::INVALID;
+    Fraction m_length;
+    ChangeMethod m_method = ChangeMethod::NORMAL;
+    ChangeDirection m_direction = ChangeDirection::INCREASING;
+    int m_cachedStartVal = -1;
+    int m_cachedEndVal = -1;
 };
 
 //---------------------------------------------------------
@@ -76,22 +77,6 @@ typedef std::vector<std::pair<Fraction, Fraction> > EndPointsVector;
 class ChangeMap : public std::multimap<Fraction, ChangeEvent>
 {
     OBJECT_ALLOCATOR(engraving, ChangeMap)
-
-    bool cleanedUp    { false };
-    static const int DEFAULT_VALUE  { 80 };
-
-    struct ChangeMethodItem {
-        ChangeMethod method;
-        const char* name;
-    };
-
-    static bool compareRampEvents(ChangeEvent& a, ChangeEvent& b) { return a.length > b.length; }
-
-    void cleanupStage0();
-    void cleanupStage1();
-    void cleanupStage2(std::vector<bool>& startsInRamp, EndPointsVector& endPoints);
-    void cleanupStage3();
-
 public:
     ChangeMap() {}
     int val(Fraction tick);
@@ -102,6 +87,30 @@ public:
     void cleanup();
 
     static int interpolate(Fraction& eventTick, ChangeEvent& event, Fraction& tick);
+
+private:
+
+    struct ChangeMethodItem {
+        ChangeMethod method;
+        const char* name;
+    };
+
+    static bool compareRampEvents(ChangeEvent& a, ChangeEvent& b) { return a.m_length > b.m_length; }
+
+    void sortRamps();
+    void resolveRampsCollisions();
+    void resolveFixInsideRampCollisions();
+    void adjustCollidingRampsLength(std::vector<bool>& startsInRamp, EndPointsVector& endPoints);
+    bool fixExistsOnTick(Fraction tick) const;
+    ChangeEvent fixEventForTick(Fraction tick) const;
+    void addMissingFixesAfterRamps();
+    void fillRampsCache();
+
+    bool m_cleanedUp = false;
+    static constexpr int DEFAULT_VALUE = 80;
+    static constexpr int MIN_VALUE = 1;
+    static constexpr int MAX_VALUE = 127;
+    static constexpr int STEP = 16;
 };
 } // namespace mu::engraving
 #endif

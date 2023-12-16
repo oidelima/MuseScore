@@ -33,6 +33,7 @@ static const std::unordered_map<mpe::ArticulationType, ms_NoteArticulation> ARTI
     { mpe::ArticulationType::Tenuto, ms_NoteArticulation_Tenuto },
     { mpe::ArticulationType::Marcato, ms_NoteArticulation_Marcato },
     { mpe::ArticulationType::Harmonic, ms_NoteArticulation_Harmonics },
+    { mpe::ArticulationType::PalmMute, ms_NoteArticulation_PalmMute },
     { mpe::ArticulationType::Mute, ms_NoteArticulation_Mute },
     { mpe::ArticulationType::Legato, ms_NoteArticulation_Slur },
     { mpe::ArticulationType::Trill, ms_NoteArticulation_Trill },
@@ -206,9 +207,13 @@ void MuseSamplerSequencer::addNoteEvent(const mpe::NoteEvent& noteEvent)
         }
     }
 
-    int pitch{};
-    int centsOffset{};
+    int pitch = 0;
+    int centsOffset = 0;
     pitchAndTuning(noteEvent.pitchCtx().nominalPitchLevel, pitch, centsOffset);
+
+    ms_NoteArticulation articulationTypes = noteArticulationTypes(noteEvent);
+    long long noteEventId = 0;
+
     if (!m_samplerLib->addNoteEvent(
             m_sampler,
             m_track,
@@ -218,13 +223,15 @@ void MuseSamplerSequencer::addNoteEvent(const mpe::NoteEvent& noteEvent)
             pitch,
             noteEvent.arrangementCtx().bps * 60.0, // API expects BPM
             centsOffset,
-            noteArticulationTypes(noteEvent))) {
+            articulationTypes,
+            noteEventId)) {
         LOGE() << "Unable to add event for track";
     } else {
-        LOGN() << "Successfully added note event, pitch: " << pitch
+        LOGN() << "Successfully added note event, id: " << noteEventId
+               << ", pitch: " << pitch
                << ", timestamp: " << noteEvent.arrangementCtx().nominalTimestamp
                << ", duration: " << noteEvent.arrangementCtx().nominalDuration
-               << ", articulations flag: " << noteArticulationTypes(noteEvent);
+               << ", articulations flag: " << articulationTypes;
     }
 
     for (auto& art : noteEvent.expressionCtx().articulations) {
@@ -241,6 +248,66 @@ void MuseSamplerSequencer::addNoteEvent(const mpe::NoteEvent& noteEvent)
             }
         }
     }
+
+    if (noteEvent.expressionCtx().articulations.contains(mpe::ArticulationType::Multibend)) {
+        addPitchBends(noteEvent, noteEventId);
+    }
+    if (noteEvent.expressionCtx().articulations.contains(mpe::ArticulationType::Vibrato)) {
+        addVibrato(noteEvent, noteEventId);
+    }
+}
+
+void MuseSamplerSequencer::addPitchBends(const mpe::NoteEvent& noteEvent, long long noteEventId)
+{
+    if (!m_samplerLib->addPitchBend) {
+        return;
+    }
+
+    mpe::duration_t duration = noteEvent.arrangementCtx().actualDuration;
+    const mpe::PitchCurve& pitchCurve = noteEvent.pitchCtx().pitchCurve;
+
+    for (auto it = pitchCurve.begin(); it != pitchCurve.end(); ++it) {
+        auto nextIt = std::next(it);
+        if (nextIt == pitchCurve.end()) {
+            continue;
+        }
+
+        if (nextIt->second == it->second) {
+            continue;
+        }
+
+        long long currOffsetStart = duration * mpe::percentageToFactor(it->first);
+        long long nextOffsetStart = duration * mpe::percentageToFactor(nextIt->first);
+
+        ms_PitchBendInfo pitchBend;
+        pitchBend.event_id = noteEventId;
+        pitchBend._start_us = currOffsetStart;
+        pitchBend._duration_us = nextOffsetStart - currOffsetStart;
+        pitchBend._offset_cents = pitchLevelToCents(nextIt->second);
+        pitchBend._type = PitchBend_Bezier;
+
+        m_samplerLib->addPitchBend(m_sampler, m_track, pitchBend);
+    }
+}
+
+void MuseSamplerSequencer::addVibrato(const mpe::NoteEvent& noteEvent, long long noteEventId)
+{
+    if (!m_samplerLib->addVibrato) {
+        return;
+    }
+    mpe::duration_t duration = noteEvent.arrangementCtx().actualDuration;
+    // stand-in data before actual mpe support
+    constexpr auto MAX_VIBRATO_STARTOFFSET_US = (int64_t)0.1 * 1000000;
+    // stand-in data before actual mpe support
+    constexpr int VIBRATO_DEPTH_CENTS = 23;
+
+    ms_VibratoInfo vibrato;
+    vibrato.event_id = noteEventId;
+    vibrato._start_us = std::min((int64_t)(duration * 0.1), MAX_VIBRATO_STARTOFFSET_US);
+    vibrato._duration_us = duration;
+    vibrato._depth_cents = VIBRATO_DEPTH_CENTS;
+
+    m_samplerLib->addVibrato(m_sampler, m_track, vibrato);
 }
 
 void MuseSamplerSequencer::pitchAndTuning(const mpe::pitch_level_t nominalPitch, int& pitch, int& centsOffset) const
@@ -269,8 +336,14 @@ void MuseSamplerSequencer::pitchAndTuning(const mpe::pitch_level_t nominalPitch,
     // Get tuning offset
     int semitonesCount = pitch - MIN_SUPPORTED_NOTE;
     mpe::pitch_level_t tuningPitchLevel = nominalPitch - (semitonesCount * mpe::PITCH_LEVEL_STEP);
-    static constexpr float convertToCents = (100.f / static_cast<float>(mpe::PITCH_LEVEL_STEP));
-    centsOffset = tuningPitchLevel * convertToCents;
+    centsOffset = pitchLevelToCents(tuningPitchLevel);
+}
+
+int MuseSamplerSequencer::pitchLevelToCents(const mpe::pitch_level_t pitchLevel) const
+{
+    static constexpr float CONVERT_TO_CENTS = (100.f / static_cast<float>(mpe::PITCH_LEVEL_STEP));
+
+    return pitchLevel * CONVERT_TO_CENTS;
 }
 
 double MuseSamplerSequencer::dynamicLevelRatio(const mpe::dynamic_level_t level) const

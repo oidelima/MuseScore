@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __REST_H__
-#define __REST_H__
+#ifndef MU_ENGRAVING_REST_H
+#define MU_ENGRAVING_REST_H
 
 #include "containers.h"
 
@@ -32,11 +32,6 @@ namespace mu::engraving {
 class TDuration;
 
 struct RestVerticalClearance {
-private:
-    int m_above = 0.0; // In space units
-    int m_below = 0.0; // In space units
-    bool m_locked = false;
-
 public:
     void reset()
     {
@@ -52,6 +47,11 @@ public:
 
     bool locked() const { return m_locked; }
     void setLocked(bool v) { m_locked = v; }
+
+private:
+    int m_above = 0.0; // In space units
+    int m_below = 0.0; // In space units
+    bool m_locked = false;
 };
 
 //---------------------------------------------------------
@@ -136,15 +136,9 @@ public:
 
     struct LayoutData : public ChordRest::LayoutData {
         std::vector<Rest*> mergedRests;     // Rests from other voices that may be merged with this
-
-        bool isSetSym() const { return m_sym.has_value(); }
-        SymId sym() const { return m_sym.value(LD_ACCESS::CHECK); }
-        void setSym(SymId v) { m_sym.set_value(v); }
-
-    private:
-        ld_field<SymId> m_sym = { "sym", SymId::restQuarter };
+        ld_field<SymId> sym = { "[Rest] sym", SymId::restQuarter };
     };
-    DECLARE_LAYOUTDATA_METHODS(Rest);
+    DECLARE_LAYOUTDATA_METHODS(Rest)
 
     int computeNaturalLine(int lines) const; // Natural rest vertical position
     int computeVoiceOffset(int lines, LayoutData* ldata) const; // Vertical displacement in multi-voice cases

@@ -295,7 +295,7 @@ void AbstractCloudService::signOut()
     clearTokens();
 }
 
-mu::Ret AbstractCloudService::ensureAuthorization(const std::string& text)
+mu::RetVal<Val> AbstractCloudService::ensureAuthorization(bool publishingScore, const std::string& text)
 {
     if (m_userAuthorized.val) {
         return make_ok();
@@ -304,7 +304,8 @@ mu::Ret AbstractCloudService::ensureAuthorization(const std::string& text)
     UriQuery query("musescore://cloud/requireauthorization");
     query.addParam("text", Val(text));
     query.addParam("cloudCode", Val(cloudInfo().code));
-    return interactive()->open(query).ret;
+    query.addParam("publishingScore", Val(publishingScore));
+    return interactive()->open(query);
 }
 
 mu::ValCh<bool> AbstractCloudService::userAuthorized() const
@@ -455,4 +456,12 @@ void AbstractCloudService::openUrl(const QUrl& url)
     if (!ret) {
         LOGE() << ret.toString();
     }
+}
+
+QString AbstractCloudService::logoColorForTheme(const ui::ThemeInfo& theme) const
+{
+    if (ui::isDarkTheme(theme.codeKey)) {
+        return "#FFFFFF";
+    }
+    return "#000000";
 }

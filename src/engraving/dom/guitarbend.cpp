@@ -93,14 +93,10 @@ Note* GuitarBend::endNote() const
     return toNote(endEl);
 }
 
-void GuitarBend::setEndNotePitch(int pitch)
+void GuitarBend::setEndNotePitch(int pitch, QuarterOffset quarterOff)
 {
     Note* note = endNote();
     IF_ASSERT_FAILED(note) {
-        return;
-    }
-
-    if (note->pitch() == pitch) {
         return;
     }
 
@@ -115,6 +111,46 @@ void GuitarBend::setEndNotePitch(int pitch)
     int targetTpc2 = transposeTpc(targetTpc1, interval, true);
 
     score()->undoChangePitch(note, pitch, targetTpc1, targetTpc2);
+
+    AccidentalType accidentalType = Accidental::value2subtype(tpc2alter(targetTpc1));
+    if (quarterOff == QuarterOffset::QUARTER_SHARP) {
+        switch (accidentalType) {
+        case AccidentalType::NONE:
+        case AccidentalType::NATURAL:
+            accidentalType = AccidentalType::SHARP_ARROW_DOWN;
+            break;
+        case AccidentalType::FLAT:
+            accidentalType = AccidentalType::FLAT_ARROW_UP;
+            break;
+        case AccidentalType::SHARP:
+            accidentalType = AccidentalType::SHARP_ARROW_UP;
+            break;
+        default:
+            break;
+        }
+    } else if (quarterOff == QuarterOffset::QUARTER_FLAT) {
+        switch (accidentalType) {
+        case AccidentalType::NONE:
+        case AccidentalType::NATURAL:
+            accidentalType = AccidentalType::FLAT_ARROW_UP;
+            break;
+        case AccidentalType::FLAT:
+            accidentalType = AccidentalType::FLAT_ARROW_DOWN;
+            break;
+        case AccidentalType::SHARP:
+            accidentalType = AccidentalType::SHARP_ARROW_DOWN;
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (accidentalType != note->accidentalType()) {
+        for (EngravingObject* linked : note->linkList()) {
+            toNote(linked)->updateLine();
+            score()->changeAccidental(toNote(linked), accidentalType);
+        }
+    }
 
     computeBendAmount();
 
@@ -233,6 +269,10 @@ PropertyValue GuitarBend::getProperty(Pid id) const
         return direction();
     case Pid::BEND_SHOW_HOLD_LINE:
         return static_cast<int>(showHoldLine());
+    case Pid::BEND_START_TIME_FACTOR:
+        return startTimeFactor();
+    case Pid::BEND_END_TIME_FACTOR:
+        return endTimeFactor();
     default:
         return SLine::getProperty(id);
     }
@@ -247,10 +287,16 @@ bool GuitarBend::setProperty(Pid propertyId, const PropertyValue& v)
     case Pid::BEND_SHOW_HOLD_LINE:
         setShowHoldLine(static_cast<GuitarBendShowHoldLine>(v.toInt()));
         break;
+    case Pid::BEND_START_TIME_FACTOR:
+        setStartTimeFactor(v.toReal());
+        break;
+    case Pid::BEND_END_TIME_FACTOR:
+        setEndTimeFactor(v.toReal());
+        break;
     default:
         return SLine::setProperty(propertyId, v);
     }
-    triggerLayoutAll();
+    triggerLayout();
     return true;
 }
 
@@ -261,6 +307,14 @@ PropertyValue GuitarBend::propertyDefault(Pid id) const
         return DirectionV::AUTO;
     case Pid::BEND_SHOW_HOLD_LINE:
         return static_cast<int>(GuitarBendShowHoldLine::AUTO);
+    case Pid::BEND_START_TIME_FACTOR:
+        return 0.f;
+    case Pid::BEND_END_TIME_FACTOR:
+        if (_type == GuitarBendType::GRACE_NOTE_BEND) {
+            return GRACE_NOTE_BEND_DEFAULT_END_TIME_FACTOR;
+        }
+
+        return 1.f;
     default:
         return SLine::propertyDefault(id);
     }
@@ -295,6 +349,8 @@ void GuitarBend::computeBendAmount()
     setBendAmountInQuarterTones(pitchDiffInQuarterTones);
 
     computeBendText();
+
+    computeIsInvalidOrNeedsWarning();
 }
 
 int GuitarBend::totBendAmountIncludingPrecedingBends() const
@@ -317,23 +373,10 @@ void GuitarBend::computeBendText()
     int fulls = quarters / 4;
     int quarts = quarters % 4;
 
-    String string;
-    if (fulls != 0) {
-        string += String::number(fulls);
-    }
+    String string = bendAmountToString(fulls, quarts);
 
-    switch (quarts) {
-    case 1:
-        string += u"\u00BC";
-        break;
-    case 2:
-        string += u"\u00BD";
-        break;
-    case 3:
-        string += u"\u00BE";
-        break;
-    default:
-        break;
+    if (string == u"0") {
+        string = u"";
     }
 
     if (string == u"1" && style().styleB(Sid::guitarBendUseFull)) {
@@ -341,6 +384,15 @@ void GuitarBend::computeBendText()
     }
 
     mutldata()->setBendDigit(string);
+}
+
+void GuitarBend::computeIsInvalidOrNeedsWarning()
+{
+    int totBendAmount = totBendAmountIncludingPrecedingBends();
+    static constexpr int UNPLAYABLE_THRESHOLD = 14;
+    static constexpr int WARNING_THRESHOLD = 8;
+    m_isInvalid = totBendAmount < 0 || totBendAmount > UNPLAYABLE_THRESHOLD || bendAmountInQuarterTones() == 0;
+    m_isBorderlineUnplayable =  totBendAmount > WARNING_THRESHOLD && totBendAmount <= UNPLAYABLE_THRESHOLD;
 }
 
 GuitarBend* GuitarBend::findPrecedingBend() const
@@ -419,7 +471,9 @@ void GuitarBend::updateHoldLine()
 
 double GuitarBend::lineWidth() const
 {
-    return style().styleMM(Sid::guitarBendLineWidth);
+    return (staffType() && staffType()->isTabStaff())
+           ? style().styleMM(Sid::guitarBendLineWidthTab)
+           : style().styleMM(Sid::guitarBendLineWidth);
 }
 
 /****************************************
@@ -512,7 +566,7 @@ bool GuitarBendSegment::setProperty(Pid propertyId, const PropertyValue& v)
     default:
         return LineSegment::setProperty(propertyId, v);
     }
-    triggerLayoutAll();
+    triggerLayout();
     return true;
 }
 
@@ -530,8 +584,9 @@ EngravingItem* GuitarBendSegment::propertyDelegate(Pid id)
 {
     switch (id) {
     case Pid::DIRECTION:
-        return guitarBend();
     case Pid::BEND_SHOW_HOLD_LINE:
+    case Pid::POSITION_LINKED_TO_MASTER:
+    case Pid::APPEARANCE_LINKED_TO_MASTER:
         return guitarBend();
     default:
         return nullptr;
@@ -560,6 +615,60 @@ bool GuitarBendSegment::isUserModified() const
 {
     bool modified = !vertexPointOff().isNull() || (m_text && m_text->isUserModified());
     return modified || LineSegment::isUserModified();
+}
+
+mu::draw::Color GuitarBend::uiColor() const
+{
+    if (score()->printing() || !MScore::warnGuitarBends) {
+        return curColor();
+    }
+
+    auto engravingConfig = engravingConfiguration();
+    if (m_isInvalid) {
+        return selected() ? engravingConfig->criticalSelectedColor() : engravingConfig->criticalColor();
+    }
+
+    if (m_isBorderlineUnplayable) {
+        return selected() ? engravingConfig->warningSelectedColor() : engravingConfig->warningColor();
+    }
+
+    return curColor();
+}
+
+void GuitarBend::adaptBendsFromTabToStandardStaff(const Staff* staff)
+{
+    // On tabs, bends force end notes to be invisible. When switching to
+    // normal staff we need to turn all the end notes visible again.
+
+    auto processBends = [](Chord* chord) {
+        for (Note* note : chord->notes()) {
+            GuitarBend* bend = note->bendFor();
+            if (!bend) {
+                continue;
+            }
+            bend->endNote()->setVisible(true);
+        }
+    };
+
+    staff_idx_t staffIdx = staff->idx();
+    track_idx_t startTrack = staff2track(staffIdx);
+    track_idx_t endTrack = startTrack + VOICES;
+    for (Segment* segment = staff->score()->firstSegment(SegmentType::ChordRest); segment; segment = segment->next1()) {
+        if (!segment->isChordRestType()) {
+            continue;
+        }
+        for (track_idx_t track = startTrack; track < endTrack; ++track) {
+            EngravingItem* item = segment->elementAt(track);
+            if (!item || !item->isChord()) {
+                continue;
+            }
+            Chord* chord = toChord(item);
+            processBends(chord);
+            for (Chord* grace : chord->graceNotes()) {
+                processBends(grace);
+            }
+        }
+    }
 }
 
 /****************************************
@@ -600,7 +709,7 @@ Note* GuitarBendHold::endNote() const
 
 double GuitarBendHold::lineWidth() const
 {
-    return style().styleMM(Sid::guitarBendLineWidth);
+    return style().styleMM(Sid::guitarBendLineWidthTab);
 }
 
 /****************************************

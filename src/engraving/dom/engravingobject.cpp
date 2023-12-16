@@ -68,6 +68,17 @@ EngravingObject::EngravingObject(const ElementType& type, EngravingObject* paren
         m_score = static_cast<Score*>(this);
     }
 
+    // gen EID
+    if (type != ElementType::SCORE) {
+        Score* s = score();
+        if (s) {
+            MasterScore* ms = s->masterScore();
+            if (ms) {
+                m_eid = ms->getEID()->newEID(m_type);
+            }
+        }
+    }
+
     if (elementsProvider()) {
         elementsProvider()->reg(this);
     }
@@ -88,6 +99,17 @@ EngravingObject::EngravingObject(const EngravingObject& se)
         }
     }
     m_links = 0;
+
+    // gen EID
+    if (m_type != ElementType::SCORE) {
+        Score* s = score();
+        if (s) {
+            MasterScore* ms = s->masterScore();
+            if (ms) {
+                m_eid = ms->getEID()->newEID(m_type);
+            }
+        }
+    }
 
     if (elementsProvider()) {
         elementsProvider()->reg(this);
@@ -110,7 +132,11 @@ EngravingObject::~EngravingObject()
         EngravingObjectList children = m_children;
         for (EngravingObject* c : children) {
             c->m_parent = nullptr;
-            c->moveToDummy();
+            if (score()->dummy()) {
+                c->moveToDummy();
+            } else {
+                delete c;
+            }
         }
     } else {
         bool isPaletteScore = score()->isPaletteScore();
@@ -232,6 +258,11 @@ EngravingObject* EngravingObject::explicitParent() const
 }
 
 void EngravingObject::setParent(EngravingObject* p)
+{
+    setParentInternal(p);
+}
+
+void EngravingObject::setParentInternal(EngravingObject* p)
 {
     IF_ASSERT_FAILED(this != p) {
         return;
@@ -686,14 +717,6 @@ TranslatableString EngravingObject::typeUserName() const
 String EngravingObject::translatedTypeUserName() const
 {
     return typeUserName().translated();
-}
-
-EID EngravingObject::eid() const
-{
-    if (!m_eid.isValid()) {
-        m_eid = score()->masterScore()->getEID()->newEID(m_type);
-    }
-    return m_eid;
 }
 
 //---------------------------------------------------------

@@ -369,8 +369,8 @@ void ProjectActionsController::downloadAndOpenCloudProject(int scoreId, const QS
         return;
     }
 
-    Ret ret = museScoreComService()->authorization()->ensureAuthorization(
-        trc("project/save", "Login or create a free account on musescore.com to open this score."));
+    std::string dialogText = trc("project/save", "Log in or create a free account on musescore.com to open this score.");
+    Ret ret = museScoreComService()->authorization()->ensureAuthorization(false, dialogText).ret;
     if (!ret) {
         return;
     }
@@ -455,8 +455,8 @@ Ret ProjectActionsController::openScoreFromMuseScoreCom(const QUrl& url)
     }
 
     // Ensure logged in
-    Ret ret = museScoreComService()->authorization()->ensureAuthorization(
-        trc("project/save", "Login or create a free account on musescore.com to open this score."));
+    std::string dialogText = trc("project/save", "Log in or create a free account on musescore.com to open this score.");
+    Ret ret = museScoreComService()->authorization()->ensureAuthorization(false, dialogText).ret;
     if (!ret) {
         return ret;
     }
@@ -878,18 +878,34 @@ bool ProjectActionsController::saveProjectToCloud(CloudProjectInfo info, SaveMod
         m_isProjectUploading = false;
     };
 
+    INotationProjectPtr project = currentNotationProject();
+
     bool isCloudAvailable = museScoreComService()->authorization()->checkCloudIsAvailable();
     if (!isCloudAvailable) {
         warnCloudIsNotAvailable();
     } else {
-        Ret ret = museScoreComService()->authorization()->ensureAuthorization(
-            trc("project/save", "Login or create a free account on musescore.com to save this score to the cloud."));
-        if (!ret) {
+        std::string dialogText = trc("project/save", "Log in to musescore.com to save this score to the cloud.");
+        RetVal<Val> retVal = museScoreComService()->authorization()->ensureAuthorization(true, dialogText);
+        if (!retVal.ret) {
+            return false;
+        }
+
+        using Response = cloud::QMLSaveToCloudResponse::SaveToCloudResponse;
+        bool saveLocally = static_cast<Response>(retVal.val.toInt()) == Response::SaveLocallyInstead;
+        if (saveLocally && project) {
+            RetVal<io::path_t> rv = openSaveProjectScenario()->askLocalPath(project, saveMode);
+            if (!rv.ret) {
+                LOGE() << rv.ret.toString();
+                return false;
+            }
+
+            saveProjectLocally(rv.val, saveMode);
+            configuration()->setLastUsedSaveLocationType(SaveLocationType::Local);
+
             return false;
         }
     }
 
-    INotationProjectPtr project = currentNotationProject();
     if (!project) {
         return false;
     }
@@ -1174,11 +1190,11 @@ Ret ProjectActionsController::uploadProject(const CloudProjectInfo& info, const 
         }
 
         if (audio.isValid()) {
-            uploadAudio(audio, newSourceUrl, editUrl, isFirstSave);
+            uploadAudio(audio, newSourceUrl, editUrl, isFirstSave, publishMode);
         } else {
             onProjectSuccessfullyUploaded(editUrl, isFirstSave);
 
-            if (configuration()->alsoShareAudioCom() || configuration()->showAlsoShareAudioComDialog()) {
+            if (publishMode && (configuration()->alsoShareAudioCom() || configuration()->showAlsoShareAudioComDialog())) {
                 alsoShareAudioCom(audio);
             }
         }
@@ -1189,7 +1205,8 @@ Ret ProjectActionsController::uploadProject(const CloudProjectInfo& info, const 
     return ret;
 }
 
-void ProjectActionsController::uploadAudio(const AudioFile& audio, const QUrl& sourceUrl, const QUrl& urlToOpen, bool isFirstSave)
+void ProjectActionsController::uploadAudio(const AudioFile& audio, const QUrl& sourceUrl, const QUrl& urlToOpen, bool isFirstSave,
+                                           bool publishMode)
 {
     m_uploadingAudioProgress = museScoreComService()->uploadAudio(*audio.device, audio.format, sourceUrl);
 
@@ -1203,7 +1220,7 @@ void ProjectActionsController::uploadAudio(const AudioFile& audio, const QUrl& s
         }
     });
 
-    m_uploadingAudioProgress->finished.onReceive(this, [this, audio, urlToOpen, isFirstSave](const ProgressResult& res) {
+    m_uploadingAudioProgress->finished.onReceive(this, [this, audio, urlToOpen, isFirstSave, publishMode](const ProgressResult& res) {
         LOGD() << "Uploading audio finished";
 
         if (!res.ret) {
@@ -1212,7 +1229,7 @@ void ProjectActionsController::uploadAudio(const AudioFile& audio, const QUrl& s
 
         onProjectSuccessfullyUploaded(urlToOpen, isFirstSave);
 
-        if (configuration()->alsoShareAudioCom() || configuration()->showAlsoShareAudioComDialog()) {
+        if (publishMode && (configuration()->alsoShareAudioCom() || configuration()->showAlsoShareAudioComDialog())) {
             alsoShareAudioCom(audio);
         }
 

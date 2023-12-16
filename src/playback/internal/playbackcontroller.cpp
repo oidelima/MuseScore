@@ -146,7 +146,7 @@ void PlaybackController::updateCurrentTempo()
 
 bool PlaybackController::isPlayAllowed() const
 {
-    return m_notation != nullptr && m_masterNotation->hasParts() && isLoaded();
+    return m_notation != nullptr && m_notation->hasVisibleParts() && isLoaded();
 }
 
 Notification PlaybackController::isPlayAllowedChanged() const
@@ -777,12 +777,17 @@ void PlaybackController::addTrack(const InstrumentTrackId& instrumentTrackId, co
     }
 
     const std::string primaryInstrId = part->instrument()->id().toStdString();
+    if (instrumentTrackId.instrumentId == primaryInstrId) {
+        const std::string trackName = part->partName().toStdString();
+        doAddTrack(instrumentTrackId, trackName, onFinished);
+        return;
+    }
 
-    const std::string trackName = (instrumentTrackId.instrumentId == primaryInstrId)
-                                  ? part->partName().toStdString()
-                                  : "(" + part->instrumentById(instrumentTrackId.instrumentId)->trackName().toStdString() + ")";
-
-    doAddTrack(instrumentTrackId, trackName, onFinished);
+    const Instrument* instrument = part->instrumentById(instrumentTrackId.instrumentId);
+    if (instrument != nullptr) {
+        std::string trackName = "(" + instrument->trackName().toStdString() + ")";
+        doAddTrack(instrumentTrackId, trackName, onFinished);
+    }
 }
 
 void PlaybackController::doAddTrack(const InstrumentTrackId& instrumentTrackId, const std::string& title,
@@ -1374,16 +1379,28 @@ void PlaybackController::setNotation(notation::INotationPtr notation)
         return;
     }
 
+    if (!m_notation->hasVisibleParts()) {
+        pause();
+    }
+    m_isPlayAllowedChanged.notify();
     updateMuteStates();
 
     INotationPartsPtr notationParts = m_notation->parts();
     NotifyList<const Part*> partList = notationParts->partList();
 
     partList.onItemAdded(this, [this](const Part*) {
+        if (!m_notation->hasVisibleParts()) {
+            pause();
+        }
+        m_isPlayAllowedChanged.notify();
         updateMuteStates();
     });
 
     partList.onItemChanged(this, [this](const Part*) {
+        if (!m_notation->hasVisibleParts()) {
+            pause();
+        }
+        m_isPlayAllowedChanged.notify();
         updateMuteStates();
     });
 

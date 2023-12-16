@@ -69,6 +69,9 @@ static void setupScoreMetaTags(mu::engraving::MasterScore* masterScore, const Pr
     if (!projectOptions.copyright.isEmpty()) {
         masterScore->setMetaTag(COPYRIGHT_TAG, projectOptions.copyright);
     }
+    if (!projectOptions.templatePath.empty()) {
+        masterScore->setMetaTag(CREATION_DATE_TAG, QDate::currentDate().toString(Qt::ISODate));
+    }
 }
 
 static QString scoreDefaultTitle()
@@ -223,7 +226,7 @@ mu::Ret NotationProject::doLoad(const io::path_t& path, const io::path_t& styleP
     // Load view settings (needs to be done after notations are created)
     m_masterNotation->notation()->viewState()->read(reader);
     for (IExcerptNotationPtr excerpt : m_masterNotation->excerpts()) {
-        excerpt->notation()->viewState()->read(reader, u"Excerpts/" + excerpt->name() + u"/");
+        excerpt->notation()->viewState()->read(reader, u"Excerpts/" + excerpt->fileName() + u"/");
     }
 
     return make_ret(Ret::Code::Ok);
@@ -709,7 +712,7 @@ mu::Ret NotationProject::writeProject(MscWriter& msczWriter, bool onlySelection,
     // Write view settings
     m_masterNotation->notation()->viewState()->write(msczWriter);
     for (IExcerptNotationPtr excerpt : m_masterNotation->excerpts()) {
-        excerpt->notation()->viewState()->write(msczWriter, u"Excerpts/" + excerpt->name() + u"/");
+        excerpt->notation()->viewState()->write(msczWriter, u"Excerpts/" + excerpt->fileName() + u"/");
     }
 
     return make_ret(Ret::Code::Ok);

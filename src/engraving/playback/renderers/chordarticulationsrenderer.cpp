@@ -65,7 +65,11 @@ void ChordArticulationsRenderer::doRender(const EngravingItem* item, const mpe::
         return;
     }
 
-    renderNoteArticulations(chord, ctx, result);
+    for (const Note* note: chord->notes()) {
+        if (isNotePlayable(note, ctx.commonArticulations)) {
+            renderNote(chord, note, ctx, result);
+        }
+    }
 }
 
 bool ChordArticulationsRenderer::renderChordArticulations(const Chord* chord, const RenderingContext& ctx,
@@ -93,8 +97,8 @@ bool ChordArticulationsRenderer::renderChordArticulations(const Chord* chord, co
     return false;
 }
 
-void ChordArticulationsRenderer::renderNoteArticulations(const Chord* chord, const RenderingContext& ctx,
-                                                         mpe::PlaybackEventList& result)
+void ChordArticulationsRenderer::renderNote(const Chord* chord, const Note* note, const RenderingContext& ctx,
+                                            mpe::PlaybackEventList& result)
 {
     Swing::ChordDurationAdjustment swingDurationAdjustment;
 
@@ -117,53 +121,28 @@ void ChordArticulationsRenderer::renderNoteArticulations(const Chord* chord, con
         noteCtx.duration = ctx.nominalDuration * swingDurationAdjustment.durationMultiplier + additionalDuration;
     };
 
-    for (const Note* note : chord->notes()) {
-        NominalNoteCtx noteCtx(note, ctx);
+    NominalNoteCtx noteCtx(note, ctx);
 
-        NoteArticulationsParser::buildNoteArticulationMap(note, ctx, noteCtx.chordCtx.commonArticulations);
+    NoteArticulationsParser::buildNoteArticulationMap(note, ctx, noteCtx.chordCtx.commonArticulations);
 
-        if (!isNotePlayable(note, noteCtx.chordCtx.commonArticulations)) {
-            continue;
-        }
-
-        if (note->tieFor()) {
-            noteCtx.duration = tiedNotesTotalDuration(note);
-            applySwingToNoteCtx(noteCtx);
-            result.emplace_back(buildNoteEvent(std::move(noteCtx)));
-            continue;
-        }
-
+    if (note->tieFor()) {
+        noteCtx.duration = tiedNotesTotalDuration(note->score(), note, noteCtx.duration);
         applySwingToNoteCtx(noteCtx);
-
-        if (noteCtx.chordCtx.commonArticulations.contains(ArticulationType::DiscreteGlissando)) {
-            GlissandosRenderer::render(note, ArticulationType::DiscreteGlissando, noteCtx.chordCtx, result);
-            continue;
-        }
-
-        if (noteCtx.chordCtx.commonArticulations.contains(ArticulationType::ContinuousGlissando)) {
-            GlissandosRenderer::render(note, ArticulationType::ContinuousGlissando, noteCtx.chordCtx, result);
-            continue;
-        }
-
         result.emplace_back(buildNoteEvent(std::move(noteCtx)));
-    }
-}
-
-duration_t ChordArticulationsRenderer::tiedNotesTotalDuration(const Note* firstNote)
-{
-    mpe::duration_t result = 0;
-
-    const Score* score = firstNote->score();
-    const std::vector<Note*> tiedNotes = firstNote->tiedNotes();
-
-    for (const Note* tiedNote : tiedNotes) {
-        if (!tiedNote || !tiedNote->chord()) {
-            continue;
-        }
-
-        BeatsPerSecond bps = score->tempomap()->tempo(tiedNote->tick().ticks());
-        result += durationFromTicks(bps.val, tiedNote->chord()->actualTicks().ticks());
+        return;
     }
 
-    return result;
+    applySwingToNoteCtx(noteCtx);
+
+    if (noteCtx.chordCtx.commonArticulations.contains(ArticulationType::DiscreteGlissando)) {
+        GlissandosRenderer::render(note, ArticulationType::DiscreteGlissando, noteCtx.chordCtx, result);
+        return;
+    }
+
+    if (noteCtx.chordCtx.commonArticulations.contains(ArticulationType::ContinuousGlissando)) {
+        GlissandosRenderer::render(note, ArticulationType::ContinuousGlissando, noteCtx.chordCtx, result);
+        return;
+    }
+
+    result.emplace_back(buildNoteEvent(std::move(noteCtx)));
 }

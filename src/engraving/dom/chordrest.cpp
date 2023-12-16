@@ -70,7 +70,6 @@ ChordRest::ChordRest(const ElementType& type, Segment* parent)
     m_staffMove    = 0;
     m_beam         = 0;
     m_tabDur       = 0;
-    m_up           = true;
     m_beamMode     = BeamMode::AUTO;
     m_isSmall     = false;
     m_melismaEnd   = false;
@@ -87,7 +86,6 @@ ChordRest::ChordRest(const ChordRest& cr, bool link)
                            // simply copied from another CR
 
     m_beamMode     = cr.m_beamMode;
-    m_up           = cr.m_up;
     m_isSmall     = cr.m_isSmall;
     m_melismaEnd   = cr.m_melismaEnd;
     m_crossMeasure = cr.m_crossMeasure;
@@ -124,8 +122,14 @@ ChordRest::~ChordRest()
     DeleteAll(m_lyrics);
     DeleteAll(m_el);
     delete m_tabDur;
-    if (m_beam && m_beam->contains(this)) {
-        delete m_beam;     // Beam destructor removes references to the deleted object
+
+    if (m_beam) {
+        mu::remove(m_beam->elements(), this);
+        m_beam = nullptr;
+    }
+
+    if (m_beamlet) {
+        m_beamlet = nullptr;
     }
 }
 
@@ -194,8 +198,6 @@ EngravingItem* ChordRest::drop(EditData& data)
                 l->setTrack(st->idx() * VOICES);
                 l->setParent(seg);
                 score->undoAddElement(l);
-
-                renderer()->layoutItem(l);
             }
         }
         delete e;
@@ -243,6 +245,7 @@ EngravingItem* ChordRest::drop(EditData& data)
     case ElementType::FRET_DIAGRAM:
     case ElementType::TREMOLOBAR:
     case ElementType::SYMBOL:
+    case ElementType::IMAGE:
         e->setTrack(track());
         e->setParent(segment());
         score()->undoAddElement(e);
@@ -357,11 +360,6 @@ EngravingItem* ChordRest::drop(EditData& data)
         }
         return e;
     }
-
-    case ElementType::IMAGE:
-        e->setParent(segment());
-        score()->undoAddElement(e);
-        return e;
 
     case ElementType::ACTION_ICON:
     {
@@ -610,8 +608,6 @@ void ChordRest::removeDeleteBeam(bool beamed)
 void ChordRest::computeUp()
 {
     UNREACHABLE;
-    m_usesAutoUp = false;
-    m_up = true;
 }
 
 //---------------------------------------------------------

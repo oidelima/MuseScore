@@ -108,7 +108,7 @@ static UndoMacro::ChangesInfo changesInfo(const UndoStack* stack)
     return actualMacro->changesInfo();
 }
 
-static std::pair<int, int> changedTicksRange(const CmdState& cmdState, const std::vector<const EngravingItem*>& changedItems)
+static std::pair<int, int> changedTicksRange(const CmdState& cmdState, const std::set<const EngravingItem*>& changedItems)
 {
     int startTick = cmdState.startTick().ticks();
     int endTick = cmdState.endTick().ticks();
@@ -135,17 +135,17 @@ static std::pair<int, int> changedTicksRange(const CmdState& cmdState, const std
 void CmdState::reset()
 {
     layoutFlags         = LayoutFlag::NO_FLAGS;
-    _updateMode         = UpdateMode::DoNothing;
-    _startTick          = Fraction(-1, 1);
-    _endTick            = Fraction(-1, 1);
+    m_updateMode         = UpdateMode::DoNothing;
+    m_startTick          = Fraction(-1, 1);
+    m_endTick            = Fraction(-1, 1);
 
-    _startStaff = mu::nidx;
-    _endStaff = mu::nidx;
-    _el = nullptr;
-    _oneElement = true;
-    _mb = nullptr;
-    _oneMeasureBase = true;
-    _locked = false;
+    m_startStaff = mu::nidx;
+    m_endStaff = mu::nidx;
+    m_el = nullptr;
+    m_oneElement = true;
+    m_mb = nullptr;
+    m_oneMeasureBase = true;
+    m_locked = false;
 }
 
 //---------------------------------------------------------
@@ -154,15 +154,15 @@ void CmdState::reset()
 
 void CmdState::setTick(const Fraction& t)
 {
-    if (_locked) {
+    if (m_locked) {
         return;
     }
 
-    if (_startTick == Fraction(-1, 1) || t < _startTick) {
-        _startTick = t;
+    if (m_startTick == Fraction(-1, 1) || t < m_startTick) {
+        m_startTick = t;
     }
-    if (_endTick == Fraction(-1, 1) || t > _endTick) {
-        _endTick = t;
+    if (m_endTick == Fraction(-1, 1) || t > m_endTick) {
+        m_endTick = t;
     }
     setUpdateMode(UpdateMode::Layout);
 }
@@ -173,15 +173,15 @@ void CmdState::setTick(const Fraction& t)
 
 void CmdState::setStaff(staff_idx_t st)
 {
-    if (_locked || st == mu::nidx) {
+    if (m_locked || st == mu::nidx) {
         return;
     }
 
-    if (_startStaff == mu::nidx || st < _startStaff) {
-        _startStaff = st;
+    if (m_startStaff == mu::nidx || st < m_startStaff) {
+        m_startStaff = st;
     }
-    if (_endStaff == mu::nidx || st > _endStaff) {
-        _endStaff = st;
+    if (m_endStaff == mu::nidx || st > m_endStaff) {
+        m_endStaff = st;
     }
 }
 
@@ -191,12 +191,12 @@ void CmdState::setStaff(staff_idx_t st)
 
 void CmdState::setMeasureBase(const MeasureBase* mb)
 {
-    if (!mb || _mb == mb || _locked) {
+    if (!mb || m_mb == mb || m_locked) {
         return;
     }
 
-    _oneMeasureBase = !_mb;
-    _mb = mb;
+    m_oneMeasureBase = !m_mb;
+    m_mb = mb;
 }
 
 //---------------------------------------------------------
@@ -205,14 +205,14 @@ void CmdState::setMeasureBase(const MeasureBase* mb)
 
 void CmdState::setElement(const EngravingItem* e)
 {
-    if (!e || _el == e || _locked) {
+    if (!e || m_el == e || m_locked) {
         return;
     }
 
-    _oneElement = !_el;
-    _el = e;
+    m_oneElement = !m_el;
+    m_el = e;
 
-    if (_oneMeasureBase) {
+    if (m_oneMeasureBase) {
         setMeasureBase(e->findMeasureBase());
     }
 }
@@ -223,11 +223,11 @@ void CmdState::setElement(const EngravingItem* e)
 
 void CmdState::unsetElement(const EngravingItem* e)
 {
-    if (_el == e) {
-        _el = nullptr;
+    if (m_el == e) {
+        m_el = nullptr;
     }
-    if (_mb == e) {
-        _mb = nullptr;
+    if (m_mb == e) {
+        m_mb = nullptr;
     }
 }
 
@@ -237,11 +237,11 @@ void CmdState::unsetElement(const EngravingItem* e)
 
 const EngravingItem* CmdState::element() const
 {
-    if (_oneElement) {
-        return _el;
+    if (m_oneElement) {
+        return m_el;
     }
-    if (_oneMeasureBase) {
-        return _mb;
+    if (m_oneMeasureBase) {
+        return m_mb;
     }
     return nullptr;
 }
@@ -252,12 +252,12 @@ const EngravingItem* CmdState::element() const
 
 void CmdState::_setUpdateMode(UpdateMode m)
 {
-    _updateMode = m;
+    m_updateMode = m;
 }
 
 void CmdState::setUpdateMode(UpdateMode m)
 {
-    if (int(m) > int(_updateMode)) {
+    if (int(m) > int(m_updateMode)) {
         _setUpdateMode(m);
     }
 }
@@ -317,6 +317,10 @@ void Score::undoRedo(bool undo, EditData* ed)
     updateSelection();
 
     ScoreChangesRange range = changesRange();
+
+    if (range.changedItems.empty()) {
+        range.changedItems = std::move(changes.changedItems);
+    }
 
     if (range.changedTypes.empty()) {
         range.changedTypes = std::move(changes.changedObjectTypes);
@@ -387,7 +391,10 @@ ScoreChangesRange Score::changesRange() const
 
     return { ticksRange.first, ticksRange.second,
              cmdState.startStaff(), cmdState.endStaff(),
-             changes.changedObjectTypes, changes.changedPropertyIdSet, changes.changedStyleIdSet };
+             std::move(changes.changedItems),
+             std::move(changes.changedObjectTypes),
+             std::move(changes.changedPropertyIdSet),
+             std::move(changes.changedStyleIdSet) };
 }
 
 #ifndef NDEBUG
@@ -397,7 +404,7 @@ ScoreChangesRange Score::changesRange() const
 
 void CmdState::dump()
 {
-    LOGD("CmdState: mode %d %d-%d", int(_updateMode), _startTick.ticks(), _endTick.ticks());
+    LOGD("CmdState: mode %d %d-%d", int(m_updateMode), m_startTick.ticks(), m_endTick.ticks());
     // bool _excerptsChanged     { false };
     // bool _instrumentsChanged  { false };
 }
@@ -485,7 +492,7 @@ void Score::lockUpdates(bool locked)
 
 void Score::deletePostponed()
 {
-    for (EngravingObject* e : m_updateState._deleteList) {
+    for (EngravingObject* e : m_updateState.deleteList) {
         if (e->isSystem()) {
             System* s = toSystem(e);
             std::list<SpannerSegment*> spanners = s->spannerSegments();
@@ -496,8 +503,8 @@ void Score::deletePostponed()
             }
         }
     }
-    DeleteAll(m_updateState._deleteList);
-    m_updateState._deleteList.clear();
+    DeleteAll(m_updateState.deleteList);
+    m_updateState.deleteList.clear();
 }
 
 //---------------------------------------------------------
@@ -839,6 +846,13 @@ Note* Score::setGraceNote(Chord* ch, int pitch, NoteType type, int len)
 GuitarBend* Score::addGuitarBend(GuitarBendType type, Note* note, Note* endNote)
 {
     if (note->isPreBendStart()) {
+        if (type == GuitarBendType::BEND && note->staffType()->isTabStaff()) {
+            GuitarBend* preBend = note->bendFor();
+            Note* mainNote = preBend ? preBend->endNote() : nullptr;
+            if (mainNote) {
+                return addGuitarBend(type, mainNote, nullptr);
+            }
+        }
         return nullptr;
     }
 
@@ -917,8 +931,8 @@ GuitarBend* Score::addGuitarBend(GuitarBendType type, Note* note, Note* endNote)
             Chord* graceChord = graceNote->chord();
             for (EngravingObject* item : graceChord->linkList()) {
                 Chord* linkedGrace = toChord(item);
-                linkedGrace->undoChangeProperty(Pid::NO_STEM, true);
-                linkedGrace->undoChangeProperty(Pid::BEAM_MODE, BeamMode::NONE);
+                linkedGrace->setNoStem(true);
+                linkedGrace->setBeamMode(BeamMode::NONE);
             }
 
             // Add bend
@@ -933,13 +947,17 @@ GuitarBend* Score::addGuitarBend(GuitarBendType type, Note* note, Note* endNote)
         }
     }
 
+    if (bend->type() == GuitarBendType::GRACE_NOTE_BEND) {
+        bend->setEndTimeFactor(GuitarBend::GRACE_NOTE_BEND_DEFAULT_END_TIME_FACTOR);
+    }
+
     Chord* startChord = bend->startNote()->chord();
     if (startChord->isGrace()) {
         for (EngravingObject* item : startChord->linkList()) {
             Chord* linkedGrace = toChord(item);
             if (linkedGrace->staffType()->isTabStaff()) {
-                linkedGrace->undoChangeProperty(Pid::NO_STEM, true);
-                linkedGrace->undoChangeProperty(Pid::BEAM_MODE, BeamMode::NONE);
+                linkedGrace->setNoStem(true);
+                linkedGrace->setBeamMode(BeamMode::NONE);
             }
         }
     }
@@ -1259,8 +1277,8 @@ Fraction Score::makeGap(Segment* segment, track_idx_t track, const Fraction& _sd
         // remove tremolo between 2 notes, if present
         if (cr->isChord()) {
             Chord* c = toChord(cr);
-            if (c->tremolo()) {
-                Tremolo* tremolo = c->tremolo();
+            if (c->tremoloDispatcher()) {
+                TremoloDispatcher* tremolo = c->tremoloDispatcher();
                 if (tremolo->twoNotes()) {
                     undoRemoveElement(tremolo);
                 }
@@ -1607,8 +1625,8 @@ void Score::changeCRlen(ChordRest* cr, const Fraction& dstF, bool fillWithRest)
             // remove ties and tremolo between 2 notes
             //
             Chord* c = toChord(cr);
-            if (c->tremolo()) {
-                Tremolo* tremolo = c->tremolo();
+            if (c->tremoloDispatcher()) {
+                TremoloDispatcher* tremolo = c->tremoloDispatcher();
                 if (tremolo->twoNotes()) {
                     undoRemoveElement(tremolo);
                 }
@@ -1829,6 +1847,7 @@ void Score::upDown(bool up, UpDownMode mode)
         int tpc1     = oNote->tpc1();
         int tpc2     = oNote->tpc2();
         int pitch    = oNote->pitch();
+        int pitchOffset = staff->pitchOffset(tick);
         int newTpc1  = tpc1;          // default to unchanged
         int newTpc2  = tpc2;          // default to unchanged
         int newPitch = pitch;         // default to unchanged
@@ -1865,7 +1884,7 @@ void Score::upDown(bool up, UpDownMode mode)
                     return;                                 // no next string to move to
                 }
                 string = stt->visualStringToPhys(string);
-                fret = stringData->fret(pitch, string, staff);
+                fret = stringData->fret(pitch + pitchOffset, string, staff);
                 if (fret == -1) {                            // can't have that note on that string
                     return;
                 }
@@ -1892,7 +1911,7 @@ void Score::upDown(bool up, UpDownMode mode)
                 }
                 // update pitch and tpc's and check it matches stringData
                 upDownChromatic(up, pitch, oNote, key, tpc1, tpc2, newPitch, newTpc1, newTpc2);
-                if (newPitch != stringData->getPitch(string, fret, staff)) {
+                if (newPitch + pitchOffset != stringData->getPitch(string, fret, staff) && !oNote->bendBack()) {
                     // oh-oh: something went very wrong!
                     LOGD("upDown tab in-string: pitch mismatch");
                     return;
@@ -1969,7 +1988,7 @@ void Score::upDown(bool up, UpDownMode mode)
                 for (EngravingObject* e : l) {
                     Note* ln = toNote(e);
                     if (ln->accidental()) {
-                        undo(new RemoveElement(ln->accidental()));
+                        doUndoRemoveElement(ln->accidental());
                     }
                 }
             }

@@ -180,7 +180,7 @@ using WriteTypes = rtti::TypeList<Accidental, ActionIcon, Ambitus, Arpeggio, Art
                                   Rasgueado, RehearsalMark, Rest,
                                   Segment, Slur, Spacer, StaffState, StaffText, StaffTypeChange, Stem, StemSlash, Sticking, StringTunings,
                                   Symbol, FSymbol, System, SystemDivider, SystemText,
-                                  TempoText, Text, TextLine, Tie, TimeSig, Tremolo, TremoloBar, Trill, Tuplet,
+                                  TempoText, Text, TextLine, Tie, TimeSig, TremoloDispatcher, TremoloBar, Trill, Tuplet,
                                   Vibrato, Volta,
                                   WhammyBar>;
 
@@ -274,7 +274,7 @@ void TWrite::writeStyledProperties(const EngravingItem* item, XmlWriter& xml)
 
 void TWrite::writeItemProperties(const EngravingItem* item, XmlWriter& xml, WriteContext& ctx)
 {
-    if (!MScore::testMode) {
+    if (!MScore::testMode && !item->score()->isPaletteScore()) {
         xml.tag("eid", item->eid().toUint64());
     }
 
@@ -735,8 +735,8 @@ void TWrite::write(const Chord* item, XmlWriter& xml, WriteContext& ctx)
     if (item->arpeggio()) {
         write(item->arpeggio(), xml, ctx);
     }
-    if (item->tremolo() && item->tremoloChordType() != TremoloChordType::TremoloSecondNote) {
-        write(item->tremolo(), xml, ctx);
+    if (item->tremoloDispatcher() && item->tremoloChordType() != TremoloChordType::TremoloSecondNote) {
+        write(item->tremoloDispatcher(), xml, ctx);
     }
     for (EngravingItem* e : item->el()) {
         if (e->isChordLine() && toChordLine(e)->note()) { // this is now written by Note
@@ -834,6 +834,27 @@ void TWrite::writeSpannerStart(Spanner* s, XmlWriter& xml, WriteContext& ctx, co
 void TWrite::writeSpannerEnd(Spanner* s, XmlWriter& xml, WriteContext& ctx, const EngravingItem* current, track_idx_t track, Fraction tick)
 {
     Fraction frac = fraction(ctx.clipboardmode(), current, tick);
+    if (frac == s->score()->endTick()) {
+        // Write a location tag if the spanner ends on the last tick of the score
+        Location spannerEndLoc = Location::absolute();
+        spannerEndLoc.setFrac(frac);
+        spannerEndLoc.setMeasure(0);
+        spannerEndLoc.setTrack(static_cast<int>(track));
+        spannerEndLoc.setVoice(static_cast<int>(track2voice(track)));
+        spannerEndLoc.setStaff(static_cast<int>(s->staffIdx()));
+
+        Location prevLoc = Location::absolute();
+        prevLoc.setFrac(ctx.curTick());
+        prevLoc.setMeasure(0);
+        prevLoc.setTrack(static_cast<int>(track));
+        prevLoc.setVoice(static_cast<int>(track2voice(track)));
+        prevLoc.setStaff(static_cast<int>(s->staffIdx()));
+
+        spannerEndLoc.toRelative(prevLoc);
+        if (spannerEndLoc.frac() != Fraction(0, 1)) {
+            write(&spannerEndLoc, xml, ctx);
+        }
+    }
     SpannerWriter w(xml, &ctx, current, s, static_cast<int>(track), frac, false);
     w.write();
 }
@@ -1250,6 +1271,10 @@ void TWrite::write(const Glissando* item, XmlWriter& xml, WriteContext& ctx)
         xml.tag("text", item->text());
     }
 
+    if (ctx.clipboardmode() && item->isHarpGliss().has_value()) {
+        xml.tagProperty("isHarpGliss", PropertyValue(item->isHarpGliss().value()));
+    }
+
     for (auto id : { Pid::GLISS_TYPE, Pid::PLAY, Pid::GLISS_STYLE, Pid::GLISS_SHIFT, Pid::GLISS_EASEIN, Pid::GLISS_EASEOUT }) {
         writeProperty(item, xml, id);
     }
@@ -1268,6 +1293,9 @@ void TWrite::write(const GuitarBend* item, XmlWriter& xml, WriteContext& ctx)
     }
     xml.startElement(item);
     xml.tag("guitarBendType", static_cast<int>(item->type()));
+    xml.tag("bendStartTimeFactor", item->startTimeFactor());
+    xml.tag("bendEndTimeFactor", item->endTimeFactor());
+    writeProperty(item, xml, Pid::DIRECTION);
     writeProperty(item, xml, Pid::BEND_SHOW_HOLD_LINE);
     writeProperties(static_cast<const SLine*>(item), xml, ctx);
 
@@ -1644,21 +1672,21 @@ void TWrite::write(const Instrument* item, XmlWriter& xml, WriteContext&, const 
     }
     for (size_t i = 0; i < item->cleffTypeCount(); ++i) {
         ClefTypeList ct = item->clefType(i);
-        if (ct._concertClef == ct._transposingClef) {
-            if (ct._concertClef != ClefType::G) {
+        if (ct.concertClef == ct.transposingClef) {
+            if (ct.concertClef != ClefType::G) {
                 if (i) {
-                    xml.tag("clef", { { "staff", i + 1 } }, TConv::toXml(ct._concertClef));
+                    xml.tag("clef", { { "staff", i + 1 } }, TConv::toXml(ct.concertClef));
                 } else {
-                    xml.tag("clef", TConv::toXml(ct._concertClef));
+                    xml.tag("clef", TConv::toXml(ct.concertClef));
                 }
             }
         } else {
             if (i) {
-                xml.tag("concertClef", { { "staff", i + 1 } }, TConv::toXml(ct._concertClef));
-                xml.tag("transposingClef", { { "staff", i + 1 } }, TConv::toXml(ct._transposingClef));
+                xml.tag("concertClef", { { "staff", i + 1 } }, TConv::toXml(ct.concertClef));
+                xml.tag("transposingClef", { { "staff", i + 1 } }, TConv::toXml(ct.transposingClef));
             } else {
-                xml.tag("concertClef", TConv::toXml(ct._concertClef));
-                xml.tag("transposingClef", TConv::toXml(ct._transposingClef));
+                xml.tag("concertClef", TConv::toXml(ct.concertClef));
+                xml.tag("transposingClef", TConv::toXml(ct.transposingClef));
             }
         }
     }
@@ -2348,13 +2376,13 @@ void TWrite::write(const Staff* item, XmlWriter& xml, WriteContext& ctx)
 
     write(item->staffType(Fraction(0, 1)), xml, ctx);
     ClefTypeList ct = item->defaultClefType();
-    if (ct._concertClef == ct._transposingClef) {
-        if (ct._concertClef != ClefType::G) {
-            xml.tag("defaultClef", TConv::toXml(ct._concertClef));
+    if (ct.concertClef == ct.transposingClef) {
+        if (ct.concertClef != ClefType::G) {
+            xml.tag("defaultClef", TConv::toXml(ct.concertClef));
         }
     } else {
-        xml.tag("defaultConcertClef", TConv::toXml(ct._concertClef));
-        xml.tag("defaultTransposingClef", TConv::toXml(ct._transposingClef));
+        xml.tag("defaultConcertClef", TConv::toXml(ct.concertClef));
+        xml.tag("defaultTransposingClef", TConv::toXml(ct.transposingClef));
     }
 
     if (item->isLinesInvisible(Fraction(0, 1))) {
@@ -2581,11 +2609,17 @@ void TWrite::write(const StringData* item, XmlWriter& xml)
     xml.startElement("StringData");
     xml.tag("frets", item->frets());
     for (const instrString& strg : item->stringList()) {
+        XmlWriter::Attributes attrs;
+
         if (strg.open) {
-            xml.tag("string", { { "open", "1" } }, strg.pitch);
-        } else {
-            xml.tag("string", strg.pitch);
+            attrs.push_back({ "open", "1" });
         }
+
+        if (strg.useFlat) {
+            attrs.push_back({ "useFlat", "1" });
+        }
+
+        xml.tag("string", attrs, strg.pitch);
     }
     xml.endElement();
 }
@@ -2658,6 +2692,16 @@ void TWrite::write(const TempoText* item, XmlWriter& xml, WriteContext& ctx)
     if (item->followText()) {
         xml.tag("followText", item->followText());
     }
+    switch (item->tempoTextType()) {
+    case TempoTextType::NORMAL:
+        break;
+    case TempoTextType::A_TEMPO:
+        xml.tag("type", "aTempo");
+        break;
+    case TempoTextType::TEMPO_PRIMO:
+        xml.tag("type", "tempoPrimo");
+        break;
+    }
     writeProperties(static_cast<const TextBase*>(item), xml, ctx, true);
     xml.endElement();
 }
@@ -2720,7 +2764,7 @@ void TWrite::write(const TimeSig* item, XmlWriter& xml, WriteContext& ctx)
     xml.endElement();
 }
 
-void TWrite::write(const Tremolo* item, XmlWriter& xml, WriteContext& ctx)
+void TWrite::write(const TremoloDispatcher* item, XmlWriter& xml, WriteContext& ctx)
 {
     if (!ctx.canWrite(item)) {
         return;

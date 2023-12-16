@@ -392,6 +392,8 @@ void NotationActionController::init()
     registerAction("text-i", &Interaction::toggleItalic, &Controller::isEditingText);
     registerAction("text-u", &Interaction::toggleUnderline, &Controller::isEditingText);
     registerAction("text-s", &Interaction::toggleStrike, &Controller::isEditingText);
+    registerAction("text-sub", &Interaction::toggleSubScript, &Controller::isEditingText);
+    registerAction("text-sup", &Interaction::toggleSuperScript, &Controller::isEditingText);
 
     registerAction("select-next-measure", &Interaction::addToSelection, MoveDirection::Right, MoveSelectionType::Measure, PlayMode::NoPlay,
                    &Controller::isNotNoteInputMode);
@@ -1241,10 +1243,13 @@ void NotationActionController::addImage()
         return;
     }
 
-    std::vector<std::string> filter = { trc("notation", "All Supported Files") + " (*.svg *.jpg *.jpeg *.png)",
+    std::vector<std::string> filter = { trc("notation", "All Supported Files") + " (*.svg *.jpg *.jpeg *.png *.bmp *.tif *.tiff)",
                                         trc("notation", "Scalable Vector Graphics") + " (*.svg)",
                                         trc("notation", "JPEG") + " (*.jpg *.jpeg)",
-                                        trc("notation", "PNG Bitmap Graphic") + " (*.png)" };
+                                        trc("notation", "PNG Bitmap Graphic") + " (*.png)",
+                                        trc("notation", "Bitmap") + " (*.bmp)",
+                                        trc("notation", "TIFF") + " (*.tif *.tiff)",
+                                        trc("notation", "All") + " (*)" };
 
     io::path_t path = interactive()->selectOpeningFile(qtrc("notation", "Insert Image"), "", filter);
     interaction->addImageToItem(path, item);

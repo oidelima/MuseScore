@@ -278,7 +278,6 @@ String EngravingItem::translatedSubtypeUserName() const
 EngravingItem* EngravingItem::linkedClone()
 {
     EngravingItem* e = clone();
-    e->setAutoplace(true);
     score()->undo(new Link(e, this));
     return e;
 }
@@ -326,9 +325,6 @@ void EngravingItem::reset()
     undoResetProperty(Pid::OFFSET);
     setOffsetChanged(false);
     EngravingObject::reset();
-    // *After* having reset all other properties, also reset the linking to score
-    undoResetProperty(Pid::POSITION_LINKED_TO_MASTER);
-    undoResetProperty(Pid::APPEARANCE_LINKED_TO_MASTER);
 }
 
 //---------------------------------------------------------
@@ -587,6 +583,11 @@ Part* EngravingItem::part() const
     return s ? s->part() : 0;
 }
 
+void EngravingItem::setColor(const mu::draw::Color& c)
+{
+    m_color = c;
+}
+
 draw::Color EngravingItem::color() const
 {
     return m_color;
@@ -627,12 +628,7 @@ mu::draw::Color EngravingItem::curColor(bool isVisible, Color normalColor) const
     }
 
     if (selected() || marked) {
-        bool isUnlinkedFromMaster = !(getProperty(Pid::POSITION_LINKED_TO_MASTER).toBool()
-                                      && getProperty(Pid::APPEARANCE_LINKED_TO_MASTER).toBool());
-        if (isTextBase()) {
-            isUnlinkedFromMaster = isUnlinkedFromMaster || !getProperty(Pid::TEXT_LINKED_TO_MASTER).toBool();
-        }
-        return engravingConfiguration()->selectionColor(track() == mu::nidx ? 0 : voice(), isVisible, isUnlinkedFromMaster);
+        return engravingConfiguration()->selectionColor(track() == mu::nidx ? 0 : voice(), isVisible, isUnlinkedFromMaster());
     }
 
     if (!isVisible) {
@@ -861,9 +857,9 @@ Compound::Compound(const ElementType& type, Score* s)
 Compound::Compound(const Compound& c)
     : EngravingItem(c)
 {
-    elements.clear();
-    for (EngravingItem* e : c.elements) {
-        elements.push_back(e->clone());
+    m_elements.clear();
+    for (EngravingItem* e : c.m_elements) {
+        m_elements.push_back(e->clone());
     }
 }
 
@@ -873,7 +869,7 @@ Compound::Compound(const Compound& c)
 
 void Compound::draw(mu::draw::Painter* painter) const
 {
-    for (EngravingItem* e : elements) {
+    for (EngravingItem* e : m_elements) {
         PointF pt(e->pos());
         painter->translate(pt);
         renderer()->drawItem(e, painter);
@@ -893,7 +889,7 @@ void Compound::addElement(EngravingItem* e, double x, double y)
 {
     e->setPos(x, y);
     e->setParent(this);
-    elements.push_back(e);
+    m_elements.push_back(e);
 }
 
 //---------------------------------------------------------
@@ -913,7 +909,7 @@ void Compound::layout()
 void Compound::setSelected(bool f)
 {
     EngravingItem::setSelected(f);
-    for (auto i = elements.begin(); i != elements.end(); ++i) {
+    for (auto i = m_elements.begin(); i != m_elements.end(); ++i) {
         (*i)->setSelected(f);
     }
 }
@@ -925,7 +921,7 @@ void Compound::setSelected(bool f)
 void Compound::setVisible(bool f)
 {
     EngravingItem::setVisible(f);
-    for (auto i = elements.begin(); i != elements.end(); ++i) {
+    for (auto i = m_elements.begin(); i != m_elements.end(); ++i) {
         (*i)->setVisible(f);
     }
 }
@@ -936,13 +932,13 @@ void Compound::setVisible(bool f)
 
 void Compound::clear()
 {
-    for (EngravingItem* e : elements) {
+    for (EngravingItem* e : m_elements) {
         if (e->selected()) {
             score()->deselect(e);
         }
         delete e;
     }
-    elements.clear();
+    m_elements.clear();
 }
 
 //---------------------------------------------------------
@@ -1280,9 +1276,34 @@ void EngravingItem::relinkPropertiesToMaster(PropertyGroup propGroup)
         }
         const PropertyValue masterValue = masterElement->getProperty(propertyId);
         const PropertyFlags masterFlags = masterElement->propertyFlags(propertyId);
-        setProperty(propertyId, masterValue);
-        setPropertyFlags(propertyId, masterFlags);
+        if (getProperty(propertyId) != masterValue) {
+            setProperty(propertyId, masterValue);
+        }
+        if (propertyFlags(propertyId) != masterFlags) {
+            setPropertyFlags(propertyId, masterFlags);
+        }
     }
+}
+
+void EngravingItem::relinkPropertyToMaster(Pid propertyId)
+{
+    assert(!score()->isMaster());
+
+    const std::list<EngravingObject*> linkedElements = linkListForPropertyPropagation();
+    EngravingObject* masterElement = nullptr;
+    for (EngravingObject* element : linkedElements) {
+        if (element->score()->isMaster()) {
+            masterElement = element;
+            break;
+        }
+    }
+
+    if (!masterElement) {
+        return;
+    }
+
+    setProperty(propertyId, masterElement->getProperty(propertyId));
+    setPropertyFlags(propertyId, masterElement->propertyFlags(propertyId));
 }
 
 PropertyPropagation EngravingItem::propertyPropagation(const EngravingItem* destinationItem, Pid propertyId) const
@@ -1305,8 +1326,16 @@ PropertyPropagation EngravingItem::propertyPropagation(const EngravingItem* dest
         return PropertyPropagation::NONE;
     }
 
-    if ((isTextProperty && isPropertyLinkedToMaster(propertyId))) {
-        return PropertyPropagation::PROPAGATE;
+    if (isTextProperty) {
+        if (sourceScore->isMaster() && destinationItem->isPropertyLinkedToMaster(propertyId)) {
+            // From master score - check if destination part follows master
+            return PropertyPropagation::PROPAGATE;
+        }
+
+        if (!sourceScore->isMaster() && isPropertyLinkedToMaster(propertyId)) {
+            // From part - check if source part follows master
+            return PropertyPropagation::PROPAGATE;
+        }
     }
 
     if (!sourceScore->isMaster()) {
@@ -1539,9 +1568,9 @@ void EngravingItem::undoSetVisible(bool v)
     undoChangeProperty(Pid::VISIBLE, v);
 }
 
-void EngravingItem::undoAddElement(EngravingItem* element)
+void EngravingItem::undoAddElement(EngravingItem* element, bool addToLinkedStaves)
 {
-    score()->undoAddElement(element);
+    score()->undoAddElement(element, addToLinkedStaves);
 }
 
 //---------------------------------------------------------
@@ -1885,9 +1914,13 @@ void EngravingItem::triggerLayout() const
     }
 }
 
-//---------------------------------------------------------
+//----------------------------------------------------------------------
 //   triggerLayoutAll
-//---------------------------------------------------------
+//
+//   *************************** CAUTION *******************************
+//   This causes a layout of the entire score: extremely expensive and
+//   likely unnecessary! Consider overriding triggerLayout() instead.
+//----------------------------------------------------------------------
 
 void EngravingItem::triggerLayoutAll() const
 {
@@ -1902,7 +1935,7 @@ void EngravingItem::triggerLayoutAll() const
 
 void EditData::addData(std::shared_ptr<ElementEditData> ed)
 {
-    data.push_back(ed);
+    m_data.push_back(ed);
 }
 
 //---------------------------------------------------------
@@ -2349,6 +2382,12 @@ bool EngravingItem::isPropertyLinkedToMaster(Pid id) const
     return true;
 }
 
+bool EngravingItem::isUnlinkedFromMaster() const
+{
+    return !(getProperty(Pid::POSITION_LINKED_TO_MASTER).toBool()
+             && getProperty(Pid::APPEARANCE_LINKED_TO_MASTER).toBool());
+}
+
 void EngravingItem::unlinkPropertyFromMaster(Pid id)
 {
     if (propertyGroup(id) == PropertyGroup::POSITION) {
@@ -2365,6 +2404,16 @@ EngravingItem::LayoutData* EngravingItem::createLayoutData() const
 
 const EngravingItem::LayoutData* EngravingItem::ldata() const
 {
+    return ldataInternal();
+}
+
+EngravingItem::LayoutData* EngravingItem::mutldata()
+{
+    return mutldataInternal();
+}
+
+const EngravingItem::LayoutData* EngravingItem::ldataInternal() const
+{
     if (!m_layoutData) {
         m_layoutData = createLayoutData();
         m_layoutData->m_item = this;
@@ -2372,7 +2421,7 @@ const EngravingItem::LayoutData* EngravingItem::ldata() const
     return m_layoutData;
 }
 
-EngravingItem::LayoutData* EngravingItem::mutldata()
+EngravingItem::LayoutData* EngravingItem::mutldataInternal()
 {
     if (!m_layoutData) {
         m_layoutData = createLayoutData();
@@ -2394,7 +2443,9 @@ void EngravingItem::LayoutData::setBbox(const mu::RectF& r)
 
 const RectF& EngravingItem::LayoutData::bbox(LD_ACCESS mode) const
 {
-    const Shape& sh = m_shape.value(mode);
+    //! NOTE Temporary disabled CHECK - a lot of messages
+    UNUSED(mode);
+    const Shape& sh = m_shape.value(LD_ACCESS::MAYBE_NOTINITED);
 
     //! NOTE Temporary
     {
@@ -2415,7 +2466,8 @@ const RectF& EngravingItem::LayoutData::bbox(LD_ACCESS mode) const
 
 Shape EngravingItem::LayoutData::shape(LD_ACCESS mode) const
 {
-    const Shape& sh = m_shape.value(LD_ACCESS::CHECK);
+    //! NOTE Temporary disabled CHECK - a lot of messages
+    const Shape& sh = m_shape.value(LD_ACCESS::MAYBE_NOTINITED);
 
     //! NOTE Temporary
     //! Reimplementation: done
@@ -2494,6 +2546,34 @@ Shape EngravingItem::LayoutData::shape(LD_ACCESS mode) const
     }
 
     return sh;
+}
+
+#ifndef NDEBUG
+void EngravingItem::LayoutData::doSetPosDebugHook(double x, double y)
+{
+    UNUSED(x);
+    UNUSED(y);
+}
+
+#endif
+
+void EngravingItem::LayoutData::dump(std::stringstream& ss) const
+{
+    ss << "\n";
+    ss << m_item->typeName() << " id: " << m_item->eid().id() << "\n";
+
+    ss << "skip: " << (m_isSkipDraw ? "yes" : "no") << "\n";
+    ss << "mag: " << m_mag << "\n";
+
+    ss << "pos: ";
+    mu::engraving::dump(m_pos, ss);
+    ss << "\n";
+
+    ss << "shape: ";
+    mu::engraving::dump(m_shape, ss);
+    ss << "\n";
+
+    supDump(ss);
 }
 
 double EngravingItem::mag() const

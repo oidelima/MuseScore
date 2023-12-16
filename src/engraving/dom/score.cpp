@@ -160,7 +160,6 @@ Score::Score()
     m_style = DefaultStyle::defaultStyle();
 
     m_rootItem = new RootItem(this);
-    m_rootItem->setParent(this);
     m_rootItem->init();
 
     //! NOTE Looks like a bug, `minimumPaddingUnit` is set using the default style's spatium value
@@ -410,6 +409,8 @@ void Score::setUpTempoMap()
         sigmap()->add(0, SigEvent(fm->ticks(),  fm->timesig(), 0));
     }
 
+    auto tempoPrimo = std::optional<BeatsPerSecond> {};
+
     for (MeasureBase* mb = first(); mb; mb = mb->next()) {
         if (mb->type() != ElementType::MEASURE) {
             mb->setTick(tick);
@@ -424,7 +425,7 @@ void Score::setUpTempoMap()
             m->mmRest()->moveTicks(diff);
         }
 
-        rebuildTempoAndTimeSigMaps(m);
+        rebuildTempoAndTimeSigMaps(m, tempoPrimo);
 
         tick += measureTicks;
     }
@@ -473,7 +474,7 @@ void Score::setUpTempoMap()
 ///    updates tempomap and time sig map for a measure
 //---------------------------------------------------------
 
-void Score::rebuildTempoAndTimeSigMaps(Measure* measure)
+void Score::rebuildTempoAndTimeSigMaps(Measure* measure, std::optional<BeatsPerSecond>& tempoPrimo)
 {
     if (isMaster()) {
         // Reset tempo to set correct time stretch for fermata.
@@ -539,10 +540,23 @@ void Score::rebuildTempoAndTimeSigMaps(Measure* measure)
                     stretch = std::max(stretch, toFermata(e)->timeStretch());
                 } else if (e->isTempoText()) {
                     TempoText* tt = toTempoText(e);
-                    if (tt->isRelative()) {
+
+                    if (tt->isNormal() && !tt->isRelative() && !tempoPrimo) {
+                        tempoPrimo = tt->tempo();
+                    } else if (tt->isRelative()) {
                         tt->updateRelative();
                     }
-                    tempomap()->setTempo(tt->segment()->tick().ticks(), tt->tempo());
+
+                    int ticks = tt->segment()->tick().ticks();
+                    if (tt->isATempo() && tt->followText()) {
+                        // this will effectively reset the tempo to the previous one
+                        // when a progressive change was active
+                        tempomap()->setTempo(ticks, tempomap()->tempo(ticks));
+                    } else if (tt->isTempoPrimo() && tt->followText()) {
+                        tempomap()->setTempo(ticks, tempoPrimo ? *tempoPrimo : Constants::DEFAULT_TEMPO);
+                    } else {
+                        tempomap()->setTempo(ticks, tt->tempo());
+                    }
                 }
             }
             if (stretch != 0.0 && stretch != 1.0) {
@@ -1482,7 +1496,7 @@ void Score::addElement(EngravingItem* element)
         InstrumentChange* ic = toInstrumentChange(element);
         ic->part()->setInstrument(ic->instrument(), ic->segment()->tick());
         addLayoutFlags(LayoutFlag::REBUILD_MIDI_MAPPING);
-        cmdState()._instrumentsChanged = true;
+        cmdState().instrumentsChanged = true;
     }
     break;
 
@@ -1506,11 +1520,32 @@ void Score::addElement(EngravingItem* element)
     case ElementType::HARMONY:
         element->part()->updateHarmonyChannels(true);
         break;
+    case ElementType::GUITAR_BEND:
+    {
+        GuitarBend* bend = toGuitarBend(element);
+        if (bend->type() == GuitarBendType::GRACE_NOTE_BEND || bend->type() == GuitarBendType::PRE_BEND) {
+            Note* startNote = bend->startNote();
+            Chord* startChord = startNote ? startNote->chord() : nullptr;
+            if (startChord) {
+                startChord->setNoStem(true);
+                startChord->setBeamMode(BeamMode::NONE);
+            }
+        }
+    }
 
     default:
         break;
     }
     element->triggerLayout();
+}
+
+void Score::doUndoAddElement(EngravingItem* element)
+{
+    if (element->generated()) {
+        addElement(element);
+    } else {
+        undo(new AddElement(element));
+    }
 }
 
 //---------------------------------------------------------
@@ -1630,6 +1665,9 @@ void Score::removeElement(EngravingItem* element)
         if (endNote) {
             endNote->setGhost(false);
             endNote->setVisible(true);
+            const StringData* stringData = endNote->part()->stringData(endNote->tick(), endNote->staffIdx());
+            int endFret = stringData->fret(endNote->pitch(), endNote->string(), endNote->staff());
+            endNote->setFret(endFret);
         }
         break;
     }
@@ -1668,7 +1706,7 @@ void Score::removeElement(EngravingItem* element)
         InstrumentChange* ic = toInstrumentChange(element);
         ic->part()->removeInstrument(ic->segment()->tick());
         addLayoutFlags(LayoutFlag::REBUILD_MIDI_MAPPING);
-        cmdState()._instrumentsChanged = true;
+        cmdState().instrumentsChanged = true;
     }
     break;
 
@@ -1689,6 +1727,16 @@ void Score::removeElement(EngravingItem* element)
 
     default:
         break;
+    }
+}
+
+void Score::doUndoRemoveElement(EngravingItem* element)
+{
+    if (element->generated()) {
+        removeElement(element);
+        element->deleteLater();
+    } else {
+        undo(new RemoveElement(element));
     }
 }
 
@@ -2227,7 +2275,7 @@ void Score::splitStaff(staff_idx_t staffIdx, int splitPoint)
     undoChangeKeySig(ns, Fraction(0, 1), st->keySigEvent(Fraction(0, 1)));
 
     masterScore()->rebuildMidiMapping();
-    cmdState()._instrumentsChanged = true;
+    cmdState().instrumentsChanged = true;
     doLayout();
 
     //
@@ -2654,9 +2702,10 @@ void Score::adjustKeySigs(track_idx_t sidx, track_idx_t eidx, KeyList km)
 
             Segment* s = measure->getSegment(SegmentType::KeySig, tick);
             KeySig* keysig = Factory::createKeySig(s);
+            keysig->setParent(s);
             keysig->setTrack(staffIdx * VOICES);
             keysig->setKeySigEvent(key);
-            s->add(keysig);
+            doUndoAddElement(keysig);
         }
     }
 }
@@ -3632,8 +3681,22 @@ void Score::collectMatch(void* data, EngravingItem* e)
         }
     }
 
-    if (p->measure && (p->measure != e->findMeasure())) {
-        return;
+    if (p->measure) {
+        auto eMeasure = e->findMeasure();
+        if (!eMeasure && e->isSpannerSegment()) {
+            if (auto ss = toSpannerSegment(e)) {
+                if (auto s = ss->spanner()) {
+                    if (auto se = s->startElement()) {
+                        if (auto mse = se->findMeasure()) {
+                            eMeasure = mse;
+                        }
+                    }
+                }
+            }
+        }
+        if (p->measure != eMeasure) {
+            return;
+        }
     }
 
     if ((p->beat.isValid()) && (p->beat != e->beat())) {
@@ -3719,9 +3782,7 @@ void Score::selectSimilar(EngravingItem* e, bool sameStaff)
     }
     pattern.staffStart = sameStaff ? e->staffIdx() : mu::nidx;
     pattern.staffEnd = sameStaff ? e->staffIdx() + 1 : mu::nidx;
-    pattern.voice   = mu::nidx;
-    pattern.system  = 0;
-    pattern.durationTicks = Fraction(-1, 1);
+    pattern.voice = mu::nidx;
 
     score->scanElements(&pattern, collectMatch);
 
@@ -3755,9 +3816,7 @@ void Score::selectSimilarInRange(EngravingItem* e)
     }
     pattern.staffStart = selection().staffStart();
     pattern.staffEnd = selection().staffEnd();
-    pattern.voice   = mu::nidx;
-    pattern.system  = 0;
-    pattern.durationTicks = Fraction(-1, 1);
+    pattern.voice = mu::nidx;
 
     score->scanElementsInRange(&pattern, collectMatch);
 
@@ -5570,6 +5629,19 @@ void Score::doLayoutRange(const Fraction& st, const Fraction& et)
 {
     TRACEFUNC;
 
+    Fraction start = st;
+    Fraction end = et;
+
+    auto spanners = score()->spannerMap().findOverlapping(st.ticks(), et.ticks());
+    for (auto interval : spanners) {
+        Spanner* spanner = interval.value;
+        if (!spanner->staff()->visible()) {
+            continue;
+        }
+        start = std::min(st, spanner->tick());
+        end = std::max(et, spanner->tick2());
+    }
+
     m_engravingFont = engravingFonts()->fontByName(style().value(Sid::MusicalSymbolFont).value<String>().toStdString());
     m_layoutOptions.noteHeadWidth = m_engravingFont->width(SymId::noteheadBlack, style().spatium() / SPATIUM20);
 
@@ -5583,7 +5655,7 @@ void Score::doLayoutRange(const Fraction& st, const Fraction& et)
         this->updateVelo();
     }
 
-    renderer()->layoutScore(this, st, et);
+    renderer()->layoutScore(this, start, end);
 
     if (m_resetAutoplace) {
         m_resetAutoplace = false;
@@ -6014,5 +6086,5 @@ void Score::setPos(POS pos, Fraction tick) { m_masterScore->setPos(pos, tick); }
 //    occurred during score loading.
 //---------------------------------------------------------
 
-int ScoreLoad::_loading = 0;
+int ScoreLoad::m_loading = 0;
 }

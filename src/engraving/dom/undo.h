@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __UNDO_H__
-#define __UNDO_H__
+#ifndef MU_ENGRAVING_UNDO_H
+#define MU_ENGRAVING_UNDO_H
 
 /**
  \file
@@ -174,7 +174,7 @@ public:
 
     struct ChangesInfo {
         ElementTypeSet changedObjectTypes;
-        std::vector<const EngravingItem*> changedItems;
+        std::set<const EngravingItem*> changedItems;
         StyleIdSet changedStyleIdSet;
         PropertyIdSet changedPropertyIdSet;
     };
@@ -1551,7 +1551,7 @@ class MoveTremolo : public UndoCommand
     Score* score { nullptr };
     Fraction chord1Tick;
     Fraction chord2Tick;
-    Tremolo* trem { nullptr };
+    TremoloDispatcher* trem { nullptr };
     int track { 0 };
 
     Chord* oldC1 { nullptr };
@@ -1561,7 +1561,7 @@ class MoveTremolo : public UndoCommand
     void redo(EditData*) override;
 
 public:
-    MoveTremolo(Score* s, Fraction c1, Fraction c2, Tremolo* tr, int t)
+    MoveTremolo(Score* s, Fraction c1, Fraction c2, TremoloDispatcher* tr, int t)
         : score(s), chord1Tick(c1), chord2Tick(c2), trem(tr), track(t) {}
 
     UNDO_TYPE(CommandType::MoveTremolo)
@@ -1592,15 +1592,19 @@ public:
 
 class ChangeHarpPedalState : public UndoCommand
 {
+    OBJECT_ALLOCATOR(engraving, ChangeHarpPedalState)
     HarpPedalDiagram* diagram;
     std::array<PedalPosition, HARP_STRING_NO> pedalState;
+
+    void flip(EditData*) override;
 
 public:
     ChangeHarpPedalState(HarpPedalDiagram* _diagram, std::array<PedalPosition, HARP_STRING_NO> _pedalState)
         : diagram(_diagram), pedalState(_pedalState) {}
-    void flip(EditData*) override;
+
     UNDO_NAME("ChangeHarpPedalState")
-    UNDO_CHANGED_OBJECTS({ diagram });
+//    UNDO_CHANGED_OBJECTS({ diagram })
+    std::vector<const EngravingObject*> objectItems() const override;
 };
 
 //---------------------------------------------------------
@@ -1609,9 +1613,13 @@ public:
 
 class ChangeSingleHarpPedal : public UndoCommand
 {
+    OBJECT_ALLOCATOR(engraving, ChangeSingleHarpPedal)
+
     HarpPedalDiagram* diagram;
     HarpStringType type;
     PedalPosition pos;
+
+    void flip(EditData*) override;
 
 public:
     ChangeSingleHarpPedal(HarpPedalDiagram* _diagram, HarpStringType _type, PedalPosition _pos)
@@ -1621,9 +1629,9 @@ public:
     {
     }
 
-    void flip(EditData*) override;
     UNDO_NAME("ChangeSingleHarpPedal")
-    UNDO_CHANGED_OBJECTS({ diagram });
+//    UNDO_CHANGED_OBJECTS({ diagram });
+    std::vector<const EngravingObject*> objectItems() const override;
 };
 
 class ChangeStringData : public UndoCommand
@@ -1640,6 +1648,22 @@ public:
 
     void flip(EditData*) override;
     UNDO_NAME("ChangeStringData")
+};
+
+class ChangeSpanArpeggio : public UndoCommand
+{
+    OBJECT_ALLOCATOR(engraving, ChangeSpanArpeggio)
+
+    Chord* m_chord = nullptr;
+    Arpeggio* m_spanArpeggio = nullptr;
+
+    void flip(EditData*) override;
+public:
+    ChangeSpanArpeggio(Chord* chord, Arpeggio* spanArp)
+        : m_chord(chord), m_spanArpeggio(spanArp) {}
+
+    UNDO_NAME("ChangeSpanArpeggio")
+    UNDO_CHANGED_OBJECTS({ m_chord })
 };
 } // namespace mu::engraving
 #endif

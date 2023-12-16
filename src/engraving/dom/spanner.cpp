@@ -175,7 +175,7 @@ bool SpannerSegment::setProperty(Pid pid, const PropertyValue& v)
     switch (pid) {
     case Pid::OFFSET2:
         m_offset2 = v.value<PointF>();
-        triggerLayoutAll();
+        triggerLayout();
         break;
     default:
         return EngravingItem::setProperty(pid, v);
@@ -430,10 +430,11 @@ Spanner::Spanner(const Spanner& s)
     m_tick         = s.m_tick;
     m_ticks        = s.m_ticks;
     m_track2       = s.m_track2;
-    if (!s.startElement() && !spannerSegments().size()) {
-        for (auto* segment : s.spannerSegments()) {
-            add(segment->clone());
-        }
+
+    for (auto* segment : s.m_segments) {
+        SpannerSegment* newSegment = toSpannerSegment(segment->clone());
+        newSegment->setParent(nullptr);
+        add(newSegment);
     }
 }
 
@@ -730,17 +731,22 @@ void Spanner::computeStartElement()
             m_startElement = startSegment();
         } else {
             Segment* seg = score()->tick2segmentMM(tick(), false, SegmentType::ChordRest);
-            if (!seg || seg->empty()) {
+            if (!seg || seg->empty() || !seg->element(track())) {
                 seg = score()->tick2segment(tick(), false, SegmentType::ChordRest);
             }
-            track_idx_t strack = (track() / VOICES) * VOICES;
-            track_idx_t etrack = strack + VOICES;
-            m_startElement = 0;
+            m_startElement = nullptr;
             if (seg) {
-                for (track_idx_t t = strack; t < etrack; ++t) {
-                    if (seg->element(t)) {
-                        m_startElement = seg->element(t);
-                        break;
+                EngravingItem* e = seg->element(track());
+                if (e) {
+                    m_startElement = e;
+                } else {
+                    track_idx_t strack = (track() / VOICES) * VOICES;
+                    track_idx_t etrack = strack + VOICES;
+                    for (track_idx_t t = strack; t < etrack; ++t) {
+                        if (seg->element(t)) {
+                            m_startElement = seg->element(t);
+                            break;
+                        }
                     }
                 }
             }
@@ -1341,17 +1347,6 @@ void Spanner::triggerLayout() const
     // Spanners do not have parent even when added to a score, so can't check parent here
     const track_idx_t tr2 = effectiveTrack2();
     score()->setLayout(m_tick, m_tick + m_ticks, staffIdx(), track2staff(tr2), this);
-}
-
-void Spanner::triggerLayoutAll() const
-{
-    // Spanners do not have parent even when added to a score, so can't check parent here
-    score()->setLayoutAll(staffIdx(), this);
-
-    const track_idx_t tr2 = track2();
-    if (tr2 != mu::nidx && tr2 != track()) {
-        score()->setLayoutAll(track2staff(tr2), this);
-    }
 }
 
 //---------------------------------------------------------

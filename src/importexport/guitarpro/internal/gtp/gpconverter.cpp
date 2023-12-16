@@ -1298,6 +1298,7 @@ void GPConverter::addContinuousSlideHammerOn()
     };
 
     std::unordered_map<Note*, Slur*> legatoSlides;
+    std::unordered_set<Chord*> hammerOnInChord;
     for (const auto& slide : _slideHammerOnMap) {
         Note* startNote = slide.first;
         Note* endNote = searchEndNote(startNote);
@@ -1350,7 +1351,12 @@ void GPConverter::addContinuousSlideHammerOn()
 
             // TODO-gp: implement for editing too. Now works just for import.
             if (slide.second == SlideHammerOn::HammerOn) {
-                Measure* measure = startNote->chord()->measure();
+                Chord* startChord = startNote->chord();
+                if (hammerOnInChord.find(startChord) != hammerOnInChord.end()) {
+                    continue;
+                }
+
+                Measure* measure = startChord->measure();
 
                 auto midTick = (startTick + endTick) / 2;
                 Segment* segment = measure->getSegment(SegmentType::ChordRest, midTick);
@@ -1360,6 +1366,7 @@ void GPConverter::addContinuousSlideHammerOn()
                 staffText->setPlainText(hammerText);
                 staffText->setTrack(track);
                 segment->add(staffText);
+                hammerOnInChord.insert(startChord);
             }
         }
     }
@@ -2213,7 +2220,7 @@ void GPConverter::addTie(const GPNote* gpnote, Note* note, TieMap& ties)
                 Chord* startChord = toChord(startNote->parent());
                 Chord* endChord = toChord(endNote->parent());
                 if (m_tremolosInChords.find(startChord) != m_tremolosInChords.end()) {
-                    Tremolo* t = Factory::createTremolo(_score->dummy()->chord());
+                    TremoloDispatcher* t = Factory::createTremoloDispatcher(_score->dummy()->chord());
                     TremoloType type = m_tremolosInChords.at(startChord);
                     t->setTremoloType(type);
                     endChord->add(t);
@@ -2705,7 +2712,7 @@ void GPConverter::addTremolo(const GPBeat* beat, ChordRest* cr)
         }
     };
 
-    Tremolo* t = Factory::createTremolo(_score->dummy()->chord());
+    TremoloDispatcher* t = Factory::createTremoloDispatcher(_score->dummy()->chord());
     t->setTremoloType(scoreTremolo(beat->tremolo()));
     Chord* ch = toChord(cr);
     ch->add(t);

@@ -31,6 +31,7 @@
 #include "infrastructure/htmlparser.h"
 
 #include "rw/compat/compatutils.h"
+#include "rw/compat/readchordlisthook.h"
 
 #include "style/defaultstyle.h"
 #include "style/style.h"
@@ -80,6 +81,8 @@
 #include "dom/textline.h"
 #include "dom/timesig.h"
 #include "dom/tremolo.h"
+#include "dom/tremolotwochord.h"
+#include "dom/tremolosinglechord.h"
 #include "dom/tuplet.h"
 #include "dom/utils.h"
 #include "dom/volta.h"
@@ -1006,8 +1009,21 @@ static void readTuplet(Tuplet* tuplet, XmlReader& e, ReadContext& ctx)
 //   readTremolo
 //---------------------------------------------------------
 
-static void readTremolo(Tremolo* tremolo, XmlReader& e, ReadContext& ctx)
+struct TremoloCompat {
+    Chord* parent = nullptr;
+    TremoloSingleChord* single = nullptr;
+    TremoloTwoChord* two = nullptr;
+};
+
+static void readTremolo(TremoloCompat& t, XmlReader& e, ReadContext& ctx)
 {
+    auto item = [](TremoloCompat& t) -> EngravingItem* {
+        if (t.two) {
+            return t.two;
+        }
+        return t.single;
+    };
+
     enum class OldTremoloType : char {
         OLD_R8 = 0,
         OLD_R16,
@@ -1016,27 +1032,37 @@ static void readTremolo(Tremolo* tremolo, XmlReader& e, ReadContext& ctx)
         OLD_C16,
         OLD_C32
     };
+
     while (e.readNextStartElement()) {
         if (e.name() == "subtype") {
             OldTremoloType sti = OldTremoloType(e.readText().toInt());
-            TremoloType st;
+            TremoloType type = TremoloType::INVALID_TREMOLO;
             switch (sti) {
             default:
-            case OldTremoloType::OLD_R8:  st = TremoloType::R8;
+            case OldTremoloType::OLD_R8:  type = TremoloType::R8;
                 break;
-            case OldTremoloType::OLD_R16: st = TremoloType::R16;
+            case OldTremoloType::OLD_R16: type = TremoloType::R16;
                 break;
-            case OldTremoloType::OLD_R32: st = TremoloType::R32;
+            case OldTremoloType::OLD_R32: type = TremoloType::R32;
                 break;
-            case OldTremoloType::OLD_C8:  st = TremoloType::C8;
+            case OldTremoloType::OLD_C8:  type = TremoloType::C8;
                 break;
-            case OldTremoloType::OLD_C16: st = TremoloType::C16;
+            case OldTremoloType::OLD_C16: type = TremoloType::C16;
                 break;
-            case OldTremoloType::OLD_C32: st = TremoloType::C32;
+            case OldTremoloType::OLD_C32: type = TremoloType::C32;
                 break;
             }
-            tremolo->setTremoloType(st);
-        } else if (!TRead::readItemProperties(tremolo, e, ctx)) {
+
+            if (isTremoloTwoChord(type)) {
+                t.two = Factory::createTremoloTwoChord(t.parent);
+                t.two->setTrack(t.parent->track());
+                t.two->setTremoloType(type);
+            } else {
+                t.single = Factory::createTremoloSingleChord(t.parent);
+                t.single->setTrack(t.parent->track());
+                t.single->setTremoloType(type);
+            }
+        } else if (!TRead::readItemProperties(item(t), e, ctx)) {
             e.unknown();
         }
     }
@@ -1068,12 +1094,20 @@ static void readChord(Measure* m, Chord* chord, XmlReader& e, ReadContext& ctx)
                 chord->add(el);
             }
         } else if (tag == "Tremolo") {
-            Tremolo* tremolo = Factory::createTremolo(chord);
-            tremolo->setDurationType(chord->durationType());
-            chord->setTremolo(tremolo);
-            tremolo->setTrack(chord->track());
-            readTremolo(tremolo, e, ctx);
-            tremolo->setParent(chord);
+            TremoloCompat tcompat;
+            tcompat.parent = chord;
+            readTremolo(tcompat, e, ctx);
+            if (tcompat.two) {
+                tcompat.two->setParent(chord);
+                tcompat.two->setDurationType(chord->durationType());
+                chord->setTremoloDispatcher(tcompat.two->dispatcher(), false);
+            } else if (tcompat.single) {
+                tcompat.single->setParent(chord);
+                tcompat.single->setDurationType(chord->durationType());
+                chord->setTremoloDispatcher(tcompat.single->dispatcher(), false);
+            } else {
+                UNREACHABLE;
+            }
         } else if (Read206::readChordProperties206(e, ctx, chord)) {
         } else {
             e.unknown();
@@ -1197,8 +1231,8 @@ static bool readTextLineProperties114(XmlReader& e, ReadContext& ctx, TextLineBa
         ls->setOffset(PointF());            // ignore offsets
         ls->setAutoplace(true);
         tl->add(ls);
-    } else if (read400::TRead::readProperties(tl, e, ctx)) {
-        return true;
+    } else if (!read400::TRead::readProperties(tl, e, ctx)) {
+        return false;
     }
     return true;
 }
@@ -1690,8 +1724,8 @@ static void readMeasure(Measure* m, int staffIdx, XmlReader& e, ReadContext& ctx
                 graceNotes.clear();
                 Fraction crticks = chord->actualTicks();
 
-                if (chord->tremolo()) {
-                    Tremolo* tremolo = chord->tremolo();
+                if (chord->tremoloDispatcher()) {
+                    TremoloDispatcher* tremolo = chord->tremoloDispatcher();
                     if (tremolo->twoNotes()) {
                         track_idx_t track = chord->track();
                         Segment* ss = 0;
@@ -1712,8 +1746,8 @@ static void readMeasure(Measure* m, int staffIdx, XmlReader& e, ReadContext& ctx
                         }
                         if (pch) {
                             tremolo->setParent(pch);
-                            pch->setTremolo(tremolo);
-                            chord->setTremolo(0);
+                            pch->setTremoloDispatcher(tremolo);
+                            chord->setTremoloDispatcher(0);
                             // force duration to half
                             Fraction pts(timeStretch * pch->globalTicks());
                             pch->setTicks(pts * Fraction(1, 2));
@@ -1740,16 +1774,14 @@ static void readMeasure(Measure* m, int staffIdx, XmlReader& e, ReadContext& ctx
                 lastTick = ctx.tick();
                 ctx.incTick(mmr->actualTicks());
             } else {
-                Segment* segment2 = m->getSegment(SegmentType::ChordRest, ctx.tick());
-                Rest* rest = Factory::createRest(segment2);
+                Rest* rest = Factory::createRest(ctx.score()->dummy()->segment());
                 rest->setDurationType(DurationType::V_MEASURE);
                 rest->setTicks(m->timesig() / timeStretch);
                 rest->setTrack(ctx.track());
                 readRest(m, rest, e, ctx);
-                if (!rest->segment()) {
-                    rest->setParent(segment2);
-                }
-                segment2 = rest->segment();
+
+                Segment* segment2 = m->getSegment(SegmentType::ChordRest, ctx.tick());
+                rest->setParent(segment2);
                 segment2->add(rest);
 
                 if (!rest->ticks().isValid()) {    // hack
@@ -1943,6 +1975,10 @@ static void readMeasure(Measure* m, int staffIdx, XmlReader& e, ReadContext& ctx
                 const AsciiStringView t(e.name());
                 if (t == "no") {
                     l->setNo(e.readInt());
+                    if (l->isEven()) {
+                        l->setEven(true);
+                        l->initTextStyleType(TextStyleType::LYRICS_EVEN);
+                    }
                 } else if (t == "syllabic") {
                     String val(e.readText());
                     if (val == "single") {
@@ -2809,7 +2845,7 @@ Err Read114::readScore(Score* score, XmlReader& e, ReadInOutData* out)
             read400::TRead::read(ks, e, ctx);
             delete ks;
         } else if (tag == "siglist") {
-            read400::TRead::read(masterScore->_sigmap, e, ctx);
+            read400::TRead::read(masterScore->m_sigmap, e, ctx);
         } else if (tag == "programVersion") {
             masterScore->setMscoreVersion(e.readText());
         } else if (tag == "programRevision") {
@@ -2947,7 +2983,7 @@ Err Read114::readScore(Score* score, XmlReader& e, ReadInOutData* out)
             } else {
                 Excerpt* ex = new Excerpt(masterScore);
                 read400::TRead::read(ex, e, ctx);
-                masterScore->_excerpts.push_back(ex);
+                masterScore->m_excerpts.push_back(ex);
             }
         } else if (tag == "Beam") {
             Beam* beam = Factory::createBeam(masterScore->dummy()->system());
@@ -2977,7 +3013,7 @@ Err Read114::readScore(Score* score, XmlReader& e, ReadInOutData* out)
         }
         for (auto i : s->clefList()) {
             Fraction tick   = Fraction::fromTicks(i.first);
-            ClefType clefId = i.second._concertClef;
+            ClefType clefId = i.second.concertClef;
             Measure* m      = masterScore->tick2measure(tick);
             if (!m) {
                 continue;
@@ -3171,13 +3207,13 @@ Err Read114::readScore(Score* score, XmlReader& e, ReadInOutData* out)
     // create excerpts
 
     std::vector<Excerpt*> readExcerpts;
-    readExcerpts.swap(masterScore->_excerpts);
+    readExcerpts.swap(masterScore->m_excerpts);
     for (Excerpt* excerpt : readExcerpts) {
         if (excerpt->parts().empty()) {             // ignore empty parts
             continue;
         }
         if (!excerpt->parts().empty()) {
-            masterScore->_excerpts.push_back(excerpt);
+            masterScore->m_excerpts.push_back(excerpt);
             Score* nscore = masterScore->createScore();
             ReadStyleHook::setupDefaultStyle(nscore);
             excerpt->setExcerptScore(nscore);

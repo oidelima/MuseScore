@@ -78,6 +78,7 @@ class FBox;
 class FSymbol;
 class Fermata;
 class FiguredBass;
+class FiguredBassItem;
 class Fingering;
 class FretDiagram;
 class Glissando;
@@ -175,7 +176,7 @@ class TextLineSegment;
 class Tie;
 class TieSegment;
 class TimeSig;
-class Tremolo;
+class TremoloDispatcher;
 class TremoloBar;
 class Trill;
 class TrillSegment;
@@ -219,8 +220,8 @@ public:
     virtual TranslatableString typeUserName() const;
     virtual String translatedTypeUserName() const;
 
-    EID eid() const;
-    void setEID(EID id) { m_eid = id; }
+    inline EID eid() const { return m_eid; }
+    inline void setEID(EID id) { m_eid = id; }
 
     EngravingObject* parent() const;
     void setParent(EngravingObject* p);
@@ -260,7 +261,7 @@ public:
     bool isStyled(Pid pid) const;
     PropertyValue styleValue(Pid, Sid) const;
 
-    void setPropertyFlags(Pid, PropertyFlags);
+    virtual void setPropertyFlags(Pid, PropertyFlags);
 
     virtual Sid getPropertyStyle(Pid) const;
 
@@ -283,6 +284,7 @@ public:
     void setLinks(LinkedObjects* le);
 
 protected:
+    virtual void setParentInternal(EngravingObject* p);
     virtual int getPropertyFlagsIdx(Pid id) const;
 
     //! NOTE For compatibility reasons, hope, we will remove the need for this method.
@@ -424,6 +426,7 @@ public:
     CONVERT(LyricsLine,    LYRICSLINE)
     CONVERT(LyricsLineSegment, LYRICSLINE_SEGMENT)
     CONVERT(FiguredBass,   FIGURED_BASS)
+    CONVERT(FiguredBassItem, FIGURED_BASS_ITEM)
     CONVERT(StaffState,    STAFF_STATE)
     CONVERT(Arpeggio,      ARPEGGIO)
     CONVERT(Image,         IMAGE)
@@ -468,6 +471,7 @@ public:
                || isTextLineSegment()
                || isOttavaSegment()
                || isPalmMuteSegment()
+               || isPickScrapeSegment()
                || isWhammyBarSegment()
                || isRasgueadoSegment()
                || isHarmonicMarkSegment()
@@ -733,7 +737,6 @@ CONVERT(Capo)
 CONVERT(Ottava)
 CONVERT(LayoutBreak)
 CONVERT(Segment)
-CONVERT(Tremolo)
 CONVERT(System)
 CONVERT(Lyrics)
 CONVERT(Stem)
@@ -799,6 +802,7 @@ CONVERT(NoteHead)
 CONVERT(LyricsLine)
 CONVERT(LyricsLineSegment)
 CONVERT(FiguredBass)
+CONVERT(FiguredBassItem)
 CONVERT(StaffState)
 CONVERT(Arpeggio)
 CONVERT(Image)

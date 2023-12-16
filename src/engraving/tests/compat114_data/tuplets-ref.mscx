@@ -67,7 +67,6 @@
         <topMargin>5</topMargin>
         <bottomMargin>5</bottomMargin>
         <boxAutoSize>0</boxAutoSize>
-        <excludeFromParts>0</excludeFromParts>
         <Text>
           <style>title</style>
           <text>Tuplets</text>
@@ -438,11 +437,8 @@
               </Note>
             </Chord>
           <endTuplet/>
-          <Rest>
-            <durationType>half</durationType>
-            </Rest>
           <location>
-            <fractions>-359/720</fractions>
+            <fractions>1/720</fractions>
             </location>
           <Rest>
             <durationType>half</durationType>

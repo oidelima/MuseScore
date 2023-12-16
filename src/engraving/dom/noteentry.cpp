@@ -723,12 +723,12 @@ Ret Score::insertChordByInsertingTime(const Position& pos)
     }
 
     // remove all two-note tremolos that end on this tick
-    for (EngravingItem* e : seg->_elist) {
+    for (EngravingItem* e : seg->elist()) {
         if (!e || !e->isChord()) {
             continue;
         }
         Chord* c = toChord(e);
-        Tremolo* t = c->tremolo();
+        TremoloDispatcher* t = c->tremoloDispatcher();
         if (t && t->twoNotes() && t->chord2() == c) {
             // we have to remove this tremolo because we are adding time in the middle of it
             // (if c is chord1 then we're inserting before the trem so it's fine)

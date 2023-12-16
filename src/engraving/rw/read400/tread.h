@@ -154,7 +154,9 @@ class Tie;
 class TimeSig;
 class TimeSigMap;
 class SigEvent;
-class Tremolo;
+class TremoloDispatcher;
+class TremoloSingleChord;
+class TremoloTwoChord;
 class TremoloBar;
 class Trill;
 class Tuplet;
@@ -289,12 +291,20 @@ public:
     static void read(Tie* t, XmlReader& xml, ReadContext& ctx);
     static void read(TimeSig* s, XmlReader& xml, ReadContext& ctx);
     static void read(TimeSigMap* item, XmlReader& xml, ReadContext& ctx);
-    static void read(Tremolo* t, XmlReader& xml, ReadContext& ctx);
+    static void read(TremoloDispatcher* t, XmlReader& xml, ReadContext& ctx);
     static void read(TremoloBar* b, XmlReader& xml, ReadContext& ctx);
     static void read(Trill* t, XmlReader& xml, ReadContext& ctx);
     static void read(Tuplet* t, XmlReader& xml, ReadContext& ctx);
     static void read(Vibrato* v, XmlReader& xml, ReadContext& ctx);
     static void read(Volta* v, XmlReader& xml, ReadContext& ctx);
+
+    // compat
+    struct TremoloCompat {
+        Chord* parent = nullptr;
+        TremoloSingleChord* single = nullptr;
+        TremoloTwoChord* two = nullptr;
+    };
+    static void read(TremoloCompat& t, XmlReader& xml, ReadContext& ctx);
 
     // temp compat
 

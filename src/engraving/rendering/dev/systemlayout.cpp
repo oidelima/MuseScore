@@ -512,7 +512,7 @@ System* SystemLayout::collectSystem(LayoutContext& ctx)
         ctx.mutState().setStartWithLongNames(ctx.state().firstSystem() && layoutBreak->startWithLongNames());
     }
 
-    if (oldSystem && !(oldSystem->page() && oldSystem->page() != ctx.state().page())) {
+    if (oldSystem && oldSystem->tick() >= system->endTick() && !(oldSystem->page() && oldSystem->page() != ctx.state().page())) {
         // We may have previously processed the ties of the next system (in LayoutChords::updateLineAttachPoints()).
         // We need to restore them to the correct state.
         SystemLayout::restoreTiesAndBends(oldSystem, ctx);
@@ -592,6 +592,10 @@ void SystemLayout::hideEmptyStaves(System* system, LayoutContext& ctx, bool isFi
     staff_idx_t staffIdx = 0;
     bool systemIsEmpty = true;
 
+    Fraction stick = system->measures().front()->tick();
+    Fraction etick = system->measures().back()->endTick();
+    auto spanners = ctx.dom().spannerMap().findOverlapping(stick.ticks(), etick.ticks() - 1);
+
     for (const Staff* staff : ctx.dom().staves()) {
         SysStaff* ss  = system->staff(staffIdx);
 
@@ -603,6 +607,14 @@ void SystemLayout::hideEmptyStaves(System* system, LayoutContext& ctx, bool isFi
                 && !(isFirstSystem && ctx.conf().styleB(Sid::dontHideStavesInFirstSystem))
                 && hideMode != Staff::HideMode::NEVER)) {
             bool hideStaff = true;
+            for (auto spanner : spanners) {
+                if (spanner.value->staff() == staff
+                    && !spanner.value->systemFlag()
+                    && !spanner.value->isHairpin()) {
+                    hideStaff = false;
+                    break;
+                }
+            }
             for (MeasureBase* m : system->measures()) {
                 if (!m->isMeasure()) {
                     continue;
@@ -840,13 +852,19 @@ void SystemLayout::layoutSystemElements(System* system, LayoutContext& ctx)
                         }
 
                         // add tremolo to skyline
-                        if (e->isChord() && toChord(e)->tremolo()) {
-                            Tremolo* t = toChord(e)->tremolo();
-                            Chord* c1 = t->chord1();
-                            Chord* c2 = t->chord2();
-                            if (!t->twoNotes() || (c1 && !c1->staffMove() && c2 && !c2->staffMove())) {
-                                if (t->chord() == e && t->addToSkyline()) {
+                        if (e->isChord() && toChord(e)->tremoloDispatcher()) {
+                            TremoloDispatcher* t = toChord(e)->tremoloDispatcher();
+                            if (!t->twoNotes()) {
+                                if (t->addToSkyline()) {
                                     skyline.add(t->shape().translate(t->pos() + e->pos() + p));
+                                }
+                            } else {
+                                Chord* c1 = t->chord1();
+                                Chord* c2 = t->chord2();
+                                if (c1 && !c1->staffMove() && c2 && !c2->staffMove()) {
+                                    if (t->chord() == e && t->addToSkyline()) {
+                                        skyline.add(t->shape().translate(t->pos() + e->pos() + p));
+                                    }
                                 }
                             }
                         }
@@ -934,7 +952,11 @@ void SystemLayout::layoutSystemElements(System* system, LayoutContext& ctx)
     auto spanners = ctx.dom().spannerMap().findOverlapping(stick.ticks(), etick.ticks());
 
     // ties
-    doLayoutTies(system, sl, stick, etick);
+    if (ctx.conf().isLinearMode()) {
+        doLayoutTiesLinear(system);
+    } else {
+        doLayoutTies(system, sl, stick, etick);
+    }
     // guitar bends
     layoutGuitarBends(sl, ctx);
 
@@ -1074,8 +1096,11 @@ void SystemLayout::layoutSystemElements(System* system, LayoutContext& ctx)
 
     LyricsLayout::layoutLyrics(ctx, system);
 
-    // here are lyrics dashes and melisma
-    for (Spanner* sp : ctx.dom().unmanagedSpanners()) {
+    // Layout lyrics dashes and melisma
+    // NOTE: loop on a *copy* of unmanagedSpanners because in some cases
+    // the underlying operation may invalidate some of the iterators.
+    std::set<Spanner*> unmanagedSpanners = ctx.dom().unmanagedSpanners();
+    for (Spanner* sp : unmanagedSpanners) {
         if (sp->tick() >= etick || sp->tick2() <= stick) {
             continue;
         }
@@ -1298,6 +1323,28 @@ void SystemLayout::doLayoutTies(System* system, std::vector<Segment*> sl, const 
                 layoutTies(ch, system, stick);
             }
             layoutTies(c, system, stick);
+        }
+    }
+}
+
+void SystemLayout::doLayoutTiesLinear(System* system)
+{
+    constexpr Fraction start = Fraction(0, 1);
+    for (Measure* measure = system->firstMeasure(); measure; measure = measure->nextMeasure()) {
+        for (Segment* segment = measure->first(); segment; segment = segment->next()) {
+            if (!segment->isChordRestType()) {
+                continue;
+            }
+            for (EngravingItem* e : segment->elist()) {
+                if (!e || !e->isChord()) {
+                    continue;
+                }
+                Chord* c = toChord(e);
+                for (Chord* ch : c->graceNotes()) {
+                    layoutTies(ch, system, start);
+                }
+                layoutTies(c, system, start);
+            }
         }
     }
 }
@@ -1573,8 +1620,8 @@ void SystemLayout::updateCrossBeams(System* system, LayoutContext& ctx)
                         ChordLayout::layoutChords1(ctx, &seg, chord->vStaffIdx());
                         seg.createShape(chord->vStaffIdx());
                     }
-                } else if (chord->tremolo() && chord->tremolo()->twoNotes()) {
-                    Tremolo* t = chord->tremolo();
+                } else if (chord->tremoloDispatcher() && chord->tremoloDispatcher()->twoNotes()) {
+                    TremoloDispatcher* t = chord->tremoloDispatcher();
                     Chord* c1 = t->chord1();
                     Chord* c2 = t->chord2();
                     if (t->userModified() || (c1->staffMove() != 0 || c2->staffMove() != 0)) {
@@ -1903,7 +1950,7 @@ double SystemLayout::totalBracketOffset(LayoutContext& ctx)
                 Bracket* dummyBr = Factory::createBracket(ctx.mutDom().dummyParent(), /*isAccessibleEnabled=*/ false);
                 dummyBr->setBracketItem(bi);
                 dummyBr->setStaffSpan(firstStaff, lastStaff);
-                dummyBr->mutldata()->setBracketHeight(3.5 * dummyBr->spatium() * 2); // default
+                dummyBr->mutldata()->bracketHeight.set_value(3.5 * dummyBr->spatium() * 2); // default
                 TLayout::layoutBracket(dummyBr, dummyBr->mutldata(), ctx.conf());
                 for (staff_idx_t stfIdx = firstStaff; stfIdx <= lastStaff; ++stfIdx) {
                     bracketWidth[stfIdx] += dummyBr->ldata()->bracketWidth();
@@ -1941,7 +1988,7 @@ double SystemLayout::layoutBrackets(System* system, LayoutContext& ctx)
                 }
                 Bracket* b = SystemLayout::createBracket(system, ctx, bi, i, static_cast<int>(staffIdx), bl, system->firstMeasure());
                 if (b != nullptr) {
-                    b->mutldata()->setBracketHeight(3.5 * b->spatium() * 2); // dummy
+                    b->mutldata()->bracketHeight.set_value(3.5 * b->spatium() * 2); // dummy
                     TLayout::layoutBracket(b, b->mutldata(), ctx.conf());
                     bracketWidth[i] = std::max(bracketWidth[i], b->ldata()->bracketWidth());
                 }
@@ -2000,6 +2047,7 @@ void SystemLayout::addBrackets(System* system, Measure* measure, LayoutContext& 
     //---------------------------------------------------
     //  layout brackets
     //---------------------------------------------------
+    SystemLayout::layoutBracketsVertical(system, ctx);
 
     system->setBracketsXPosition(measure->x());
 
@@ -2098,6 +2146,7 @@ Bracket* SystemLayout::createBracket(System* system, LayoutContext& ctx, Bracket
 
 void SystemLayout::layout2(System* system, LayoutContext& ctx)
 {
+    TRACEFUNC;
     Box* vb = system->vbox();
     if (vb) {
         TLayout::layoutBox(vb, vb->mutldata(), ctx);
@@ -2257,6 +2306,7 @@ void SystemLayout::layout2(System* system, LayoutContext& ctx)
 
 void SystemLayout::restoreLayout2(System* system, LayoutContext& ctx)
 {
+    TRACEFUNC;
     if (system->vbox()) {
         return;
     }
@@ -2318,7 +2368,7 @@ void SystemLayout::layoutBracketsVertical(System* system, LayoutContext& ctx)
 
         Bracket::LayoutData* bldata = b->mutldata();
         bldata->setPosY(sy);
-        bldata->setBracketHeight(ey - sy);
+        bldata->bracketHeight = ey - sy;
         TLayout::layoutBracket(b, bldata, ctx.conf());
     }
 }
@@ -2472,6 +2522,7 @@ void SystemLayout::setInstrumentNames(System* system, LayoutContext& ctx, bool l
 
 double SystemLayout::minDistance(const System* top, const System* bottom, LayoutContext& ctx)
 {
+    TRACEFUNC;
     if (top->vbox() && !bottom->vbox()) {
         return std::max(double(top->vbox()->bottomGap()), bottom->minTop());
     } else if (!top->vbox() && bottom->vbox()) {

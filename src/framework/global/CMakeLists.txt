@@ -56,6 +56,8 @@ set(MODULE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/progress.h
     ${CMAKE_CURRENT_LIST_DIR}/utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/utils.h
+    ${CMAKE_CURRENT_LIST_DIR}/interpolation.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/interpolation.h
     ${CMAKE_CURRENT_LIST_DIR}/defer.h
     ${CMAKE_CURRENT_LIST_DIR}/containers.h
     ${CMAKE_CURRENT_LIST_DIR}/icryptographichash.h
@@ -63,7 +65,6 @@ set(MODULE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/allocator.h
     ${CMAKE_CURRENT_LIST_DIR}/dlib.h
     ${CMAKE_CURRENT_LIST_DIR}/iprocess.h
-    ${CMAKE_CURRENT_LIST_DIR}/number.h
 
     ${CMAKE_CURRENT_LIST_DIR}/types/bytearray.cpp
     ${CMAKE_CURRENT_LIST_DIR}/types/bytearray.h
@@ -88,6 +89,7 @@ set(MODULE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/types/mnemonicstring.h
     ${CMAKE_CURRENT_LIST_DIR}/types/version.cpp
     ${CMAKE_CURRENT_LIST_DIR}/types/version.h
+    ${CMAKE_CURRENT_LIST_DIR}/types/number.h
 
     ${CMAKE_CURRENT_LIST_DIR}/io/ioenums.h
     ${CMAKE_CURRENT_LIST_DIR}/io/path.cpp

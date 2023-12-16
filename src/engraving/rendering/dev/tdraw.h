@@ -150,7 +150,7 @@ class TextLineBase;
 class TextLineBaseSegment;
 class Tie;
 class TimeSig;
-class Tremolo;
+class TremoloDispatcher;
 class TremoloBar;
 class TrillSegment;
 class TripletFeel;
@@ -163,6 +163,12 @@ class Volta;
 class VoltaSegment;
 
 class WhammyBarSegment;
+
+// dev
+class System;
+class Measure;
+class Segment;
+class Chord;
 }
 
 namespace mu::engraving::rendering::dev {
@@ -279,7 +285,7 @@ private:
     static void draw(const TextLineSegment* item, draw::Painter* painter);
     static void draw(const TieSegment* item, draw::Painter* painter);
     static void draw(const TimeSig* item, draw::Painter* painter);
-    static void draw(const Tremolo* item, draw::Painter* painter);
+    static void draw(const TremoloDispatcher* item, draw::Painter* painter);
     static void draw(const TremoloBar* item, draw::Painter* painter);
     static void draw(const TrillSegment* item, draw::Painter* painter);
     static void draw(const TripletFeel* item, draw::Painter* painter);
@@ -292,6 +298,12 @@ private:
 
     static void drawTextBase(const TextBase* item, draw::Painter* painter);
     static void drawTextLineBaseSegment(const TextLineBaseSegment* item, draw::Painter* painter);
+
+    // dev
+    static void draw(const System* item, draw::Painter* painter);
+    static void draw(const Measure* item, draw::Painter* painter);
+    static void draw(const Segment* item, draw::Painter* painter);
+    static void draw(const Chord* item, draw::Painter* painter);
 };
 }
 

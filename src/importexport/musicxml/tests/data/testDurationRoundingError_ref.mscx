@@ -24,6 +24,7 @@
         <StaffType group="pitched">
           <name>stdNormal</name>
           </StaffType>
+        <hideWhenEmpty>3</hideWhenEmpty>
         </Staff>
       <trackName>Guitar</trackName>
       <Instrument id="guitar-steel-treble-clef">
@@ -96,7 +97,6 @@
     <Staff id="1">
       <VBox>
         <height>10</height>
-        <excludeFromParts>0</excludeFromParts>
         <Text>
           <style>title</style>
           <text>Duration Rounding Error</text>

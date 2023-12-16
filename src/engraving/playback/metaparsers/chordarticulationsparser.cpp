@@ -85,6 +85,10 @@ void ChordArticulationsParser::doParse(const EngravingItem* item, const Renderin
     parseChordLine(chord, ctx, result);
 
     parseArticulationSymbols(chord, ctx, result);
+
+    if (ctx.profile->contains(ArticulationType::Multibend)) {
+        parseBends(chord, ctx, result);
+    }
 }
 
 void ChordArticulationsParser::parseSpanners(const Chord* chord, const RenderingContext& ctx, mpe::ArticulationMap& result)
@@ -132,6 +136,23 @@ void ChordArticulationsParser::parseSpanners(const Chord* chord, const Rendering
     }
 }
 
+void ChordArticulationsParser::parseBends(const Chord* chord, const RenderingContext& ctx, mpe::ArticulationMap& result)
+{
+    for (const Note* note : chord->notes()) {
+        for (const Spanner* spanner : note->spannerBack()) {
+            if (spanner->isGuitarBend()) {
+                SpannersMetaParser::parse(spanner, ctx, result);
+            }
+        }
+
+        for (const Spanner* spanner : note->spannerFor()) {
+            if (spanner->isGuitarBend()) {
+                SpannersMetaParser::parse(spanner, ctx, result);
+            }
+        }
+    }
+}
+
 void ChordArticulationsParser::parseArticulationSymbols(const Chord* chord, const RenderingContext& ctx, mpe::ArticulationMap& result)
 {
     for (const Articulation* articulation : chord->articulations()) {
@@ -154,7 +175,7 @@ void ChordArticulationsParser::parseAnnotations(const Chord* chord, const Render
 
 void ChordArticulationsParser::parseTremolo(const Chord* chord, const RenderingContext& ctx, mpe::ArticulationMap& result)
 {
-    const Tremolo* tremolo = chord->tremolo();
+    const TremoloDispatcher* tremolo = chord->tremoloDispatcher();
 
     if (!tremolo || !tremolo->playTremolo()) {
         return;

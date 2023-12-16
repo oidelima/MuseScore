@@ -467,8 +467,8 @@ const std::array<StyleDef::StyleValue, size_t(Sid::STYLES)> StyleDef::styleValue
     { Sid::staccatoGateTime,        "staccatoGateTime",        PropertyValue(50) },
     { Sid::slurGateTime,            "slurGateTime",            PropertyValue(100) },
 
-    { Sid::ArpeggioNoteDistance,    "ArpeggioNoteDistance",    Spatium(.5) },
-    { Sid::ArpeggioAccidentalDistance,    "ArpeggioAccidentalDistance",    Spatium(.5) },
+    { Sid::ArpeggioNoteDistance,    "ArpeggioNoteDistance",    Spatium(.4) },
+    { Sid::ArpeggioAccidentalDistance,    "ArpeggioAccidentalDistance",    Spatium(.3) },
     { Sid::ArpeggioAccidentalDistanceMin,    "ArpeggioAccidentalDistanceMin",    Spatium(0.33) },
     { Sid::ArpeggioLineWidth,       "ArpeggioLineWidth",       Spatium(.18) },
     { Sid::ArpeggioHookLen,         "ArpeggioHookLen",         Spatium(.8) },
@@ -819,6 +819,8 @@ const std::array<StyleDef::StyleValue, size_t(Sid::STYLES)> StyleDef::styleValue
     { Sid::stringNumberFrameBgColor,      "stringNumberFrameBgColor",      PropertyValue::fromValue(Color::transparent) },
     { Sid::stringNumberOffset,            "stringNumberOffset",            PointF(0.0, 0.0) },
     { Sid::preferSameStringForTranspose,  "preferSameStringForTranspose",  false },
+
+    { Sid::stringTuningsFontSize,         "stringTuningsFontSize",         9.0 },
 
     { Sid::harpPedalDiagramFontFace,          "harpPedalDiagramFontFace",          "Edwin" },
     { Sid::harpPedalDiagramFontSize,          "harpPedalDiagramFontSize",          10.0 },
@@ -1187,6 +1189,8 @@ const std::array<StyleDef::StyleValue, size_t(Sid::STYLES)> StyleDef::styleValue
     { Sid::glissandoFrameBgColor,         "glissandoFrameBgColor",        PropertyValue::fromValue(Color::transparent) },
     { Sid::glissandoLineWidth,            "glissandoLineWidth",           Spatium(0.15) },
     { Sid::glissandoText,                 "glissandoText",                String(u"gliss.") },
+    { Sid::glissandoStyle,                "glissandoStyle",               GlissandoStyle::CHROMATIC },
+    { Sid::glissandoStyleHarp,            "glissandoStyleHarp",           GlissandoStyle::DIATONIC },
 
     { Sid::bendFontFace,                  "bendFontFace",                 "Edwin" },
     { Sid::bendFontSize,                  "bendFontSize",                 8.0 },
@@ -1205,7 +1209,8 @@ const std::array<StyleDef::StyleValue, size_t(Sid::STYLES)> StyleDef::styleValue
     { Sid::bendLineWidth,                 "bendLineWidth",                Spatium(0.15) },
     { Sid::bendArrowWidth,                "bendArrowWidth",               Spatium(.5) },
 
-    { Sid::guitarBendLineWidth,           "guitarBendLineWidth",          Spatium(0.15) },
+    { Sid::guitarBendLineWidth,           "guitarBendLineWidth",          Spatium(0.13) },
+    { Sid::guitarBendLineWidthTab,        "guitarBendLineWidthTab",       Spatium(0.15) },
     { Sid::guitarBendHeightAboveTABStaff, "guitarBendHeightAboveTABStaff", 1.5 }, // in units of TAB lines dist
     { Sid::guitarBendPartialBendHeight,   "guitarBendPartialBendHeight",  Spatium(1.5) },
     { Sid::guitarBendUseFull,             "guitarBendUseFull",            false },

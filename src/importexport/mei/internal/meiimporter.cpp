@@ -62,6 +62,7 @@
 #include "engraving/dom/textline.h"
 #include "engraving/dom/tie.h"
 #include "engraving/dom/timesig.h"
+#include "engraving/dom/tremolo.h"
 #include "engraving/dom/tuplet.h"
 #include "engraving/dom/utils.h"
 
@@ -92,6 +93,7 @@ bool MeiImporter::read(const io::path_t& path)
     m_uids->clear();
 
     m_lastMeasure = nullptr;
+    m_tremoloId.clear();
     m_tuplet = nullptr;
     m_beamBeginMode = BeamMode::AUTO;
     m_graceBeamBeginMode = BeamMode::AUTO;
@@ -238,7 +240,7 @@ ChordRest* MeiImporter::addChordRest(pugi::xml_node node, Measure* measure, int 
     }
 
     Segment* segment = nullptr;
-    // For grace notes we use a dummy segment, otherwise a ChordRest segement with the appropriate ticks value
+    // For grace notes we use a dummy segment, otherwise a ChordRest segment with the appropriate ticks value
     if (m_readingGraceNotes) {
         segment = m_score->dummy()->segment();
     } else {
@@ -337,7 +339,7 @@ ChordRest* MeiImporter::addChordRest(pugi::xml_node node, Measure* measure, int 
 /**
  * Add grace notes to a ChordRest When a grace group was previously read and added to MeiImpoter::m_graceNotes
  * Ignore (delete) the grace notes if the ChordRest is a Rest.
- * Look at m_graceNoteType for setting the acciaccatura note type (when grace notes preceed only)
+ * Look at m_graceNoteType for setting the acciaccatura note type (when grace notes precede only)
  */
 
 bool MeiImporter::addGraceNotesToChord(ChordRest* chordRest, bool isAfter)
@@ -544,7 +546,7 @@ EngravingItem* MeiImporter::addToChordRest(const libmei::Element& meiElement, Me
 }
 
 /**
- * Basic helper that removes the '#' characther from a dataURI reference to \@xml:id.
+ * Basic helper that removes the '#' character from a dataURI reference to \@xml:id.
  */
 
 std::string MeiImporter::xmlIdFrom(std::string dataURI)
@@ -620,7 +622,7 @@ ChordRest* MeiImporter::findEnd(pugi::xml_node controlNode, const ChordRest* sta
     ChordRest* chordRest = nullptr;
     if (startEndIdAtt.HasEndid()) {
         std::string endId = this->xmlIdFrom(startEndIdAtt.GetEndid());
-        // The endid corresponding ChordRest should have been added to the m_endIdChordRests previously
+        // The @endid corresponding ChordRest should have been added to the m_endIdChordRests previously
         if (!m_endIdChordRests.count(endId) || !m_endIdChordRests.at(endId)) {
             Convert::logs.push_back(String("Could not find element for @endid '%1'").arg(String::fromStdString(startEndIdAtt.GetEndid())));
             return nullptr;
@@ -702,7 +704,7 @@ Note* MeiImporter::findEndNote(pugi::xml_node controlNode)
     libmei::InstStartEndId startEndIdAtt;
     startEndIdAtt.ReadStartEndId(controlNode);
 
-    // This should not happend because an element without and @endid will not have been added to the map
+    // This should not happen because an element without an @endid will not have been added to the map
     if (!startEndIdAtt.HasEndid()) {
         return nullptr;
     }
@@ -726,7 +728,7 @@ const std::list<ChordRest*> MeiImporter::findPlistChordRests(pugi::xml_node cont
     libmei::InstPlist plistAtt;
     plistAtt.ReadPlist(controlNode);
 
-    // This should not happend because an element without and @plist will not have been added to the map
+    // This should not happen because an element without a @plist will not have been added to the map
     if (!plistAtt.HasPlist()) {
         return {};
     }
@@ -896,7 +898,7 @@ bool MeiImporter::readMeiHead(pugi::xml_node root)
  * Read the MEI score.
  * Previously builds a map of IDs being referred to (e.g., through `@startid` or `@endid`)
  * Also builds a map for staff@n and layer@n when reading MEI files not produced with MuseScore.
- * Reads the intitial scoreDef before reading the section elements.
+ * Reads the initial scoreDef before reading the section elements.
  */
 
 bool MeiImporter::readScore(pugi::xml_node root)
@@ -1057,7 +1059,7 @@ bool MeiImporter::readLines(pugi::xml_node parentNode, StringList& lines, size_t
         } else if (this->isNode(child, u"lb")) {
             line += 1;
         } else {
-            // Try to reecursively read the text content of child nodes
+            // Try to recursively read the text content of child nodes
             // For files not written by MuseScore with additional /rend elements
             this->addLog("unsupported child element, reading text only", child);
             readLines(child, lines, line);
@@ -1287,8 +1289,8 @@ bool MeiImporter::readEnding(pugi::xml_node endingNode)
 /**
  * Read measure and its content.
  * Sets m_endingStart and m_endingEnd pointers as appropriate.
- * Try to manage measure offest looking at MEI measure@n (num-like values).
- * Ajust various flags (end barline, repeat counts).
+ * Try to manage measure offset looking at MEI measure@n (num-like values).
+ * Adjust various flags (end barline, repeat counts).
  * Reads measure control events.
  */
 
@@ -1487,7 +1489,7 @@ bool MeiImporter::readLayers(pugi::xml_node parentNode, Measure* measure, int st
 
     size_t i = 0;
     for (pugi::xpath_node xpathNode : layers) {
-        // We cannot have more than 4 voices in Musescore
+        // We cannot have more than 4 voices in MuseScore
         if (i >= VOICES) {
             Convert::logs.push_back(String("More than %1 layers in a staff in not supported. Their content will not be imported.").arg(
                                         VOICES));
@@ -1525,6 +1527,8 @@ bool MeiImporter::readElements(pugi::xml_node parentNode, Measure* measure, int 
         std::string elementName = std::string(xpathNode.node().name());
         if (elementName == "beam") {
             success = success && this->readBeam(xpathNode.node(), measure, track, ticks);
+        } else if (elementName == "bTrem") {
+            success = success && this->readBTrem(xpathNode.node(), measure, track, ticks);
         } else if (elementName == "chord") {
             success = success && this->readChord(xpathNode.node(), measure, track, ticks);
         } else if (elementName == "clef" && !m_readingGraceNotes) {
@@ -1622,6 +1626,30 @@ bool MeiImporter::readBeam(pugi::xml_node beamNode, Measure* measure, int track,
 }
 
 /**
+ * Read a bTrem.
+ * Set MuseScore TremoloType.
+ */
+
+bool MeiImporter::readBTrem(pugi::xml_node bTremNode, Measure* measure, int track, int& ticks)
+{
+    IF_ASSERT_FAILED(measure) {
+        return false;
+    }
+
+    bool success = true;
+
+    libmei::BTrem meiBTrem;
+    meiBTrem.Read(bTremNode);
+    m_tremoloId = meiBTrem.m_xmlId;
+
+    success = readElements(bTremNode, measure, track, ticks);
+
+    m_tremoloId.clear();
+
+    return success;
+}
+
+/**
  * Read a chord and its content (note elements).
  */
 
@@ -1641,6 +1669,13 @@ bool MeiImporter::readChord(pugi::xml_node chordNode, Measure* measure, int trac
     Chord* chord = static_cast<Chord*>(addChordRest(chordNode, measure, track, meiChord, ticks, false));
     this->readStemsAtt(chord, meiChord);
     this->readArtics(chordNode, chord);
+
+    if (!m_tremoloId.empty()) {
+        TremoloDispatcher* tremolo = Factory::createTremoloDispatcher(chord);
+        m_uids->reg(tremolo, m_tremoloId);
+        tremolo->setTremoloType(Convert::stemModFromMEI(meiChord.GetStemMod()));
+        chord->add(tremolo);
+    }
 
     pugi::xpath_node_set notes = chordNode.select_nodes(".//note");
     for (pugi::xpath_node xpathNode : notes) {
@@ -1778,7 +1813,7 @@ bool MeiImporter::readNote(pugi::xml_node noteNode, Measure* measure, int track,
     if (accidNode) {
         meiAccid.Read(accidNode);
     } else {
-        // Support for non MEI-Basic accid and accid.ges encoded in <note> - this is not accademic...
+        // Support for non MEI-Basic accid and accid.ges encoded in <note> - this is not academic...
         meiAccid.Read(noteNode);
     }
 
@@ -1796,6 +1831,12 @@ bool MeiImporter::readNote(pugi::xml_node noteNode, Measure* measure, int track,
         this->readStemsAtt(chord, meiNote);
         this->readArtics(noteNode, chord);
         this->readVerses(noteNode, chord);
+        if (!m_tremoloId.empty()) {
+            TremoloDispatcher* tremolo = Factory::createTremoloDispatcher(chord);
+            m_uids->reg(tremolo, m_tremoloId);
+            tremolo->setTremoloType(Convert::stemModFromMEI(meiNote.GetStemMod()));
+            chord->add(tremolo);
+        }
     }
 
     Note* note = Factory::createNote(chord);
@@ -2113,7 +2154,7 @@ bool MeiImporter::readArpeg(pugi::xml_node arpegNode, Measure* measure)
     Convert::arpegFromMEI(arpeggio, meiArpeg, warning);
 
     if (meiArpeg.HasPlist()) {
-        // Add the Arpeggion to the open arpeggio map, which will handle ties differently as appropriate
+        // Add the Arpeggio to the open arpeggio map, which will handle ties differently as appropriate
         m_openArpegMap[arpeggio] = arpegNode;
     }
 
@@ -2605,7 +2646,7 @@ bool MeiImporter::readTie(pugi::xml_node tieNode, Measure* measure)
     libmei::Tie meiTie;
     meiTie.Read(tieNode);
 
-    // We do not use addSpanner here because Tie object are added directy to the start and end Note objects
+    // We do not use addSpanner here because Tie object are added directly to the start and end Note objects
     Note* startNote = this->findStartNote(meiTie);
     if (!startNote) {
         // Here we could detect if a if its a tied chord (for files not exported from MuseScore)
@@ -2976,7 +3017,7 @@ void MeiImporter::addEndBarLineToMeasure(Measure* measure, BarLineType barLineTy
         return;
     }
 
-    // Here we could check if this is the last measure and not add END because mscore sets it automatically
+    // Here we could check if this is the last measure and not add END because MuseScore sets it automatically
     Segment* segment = measure->getSegment(SegmentType::EndBarLine, measure->endTick());
     for (staff_idx_t staffIdx = 0; staffIdx < m_score->nstaves(); staffIdx++) {
         BarLine* barLine = Factory::createBarLine(segment);
@@ -3071,7 +3112,7 @@ void MeiImporter::addSpannerEnds()
         // Go through the list of chord rest and check if they are on a staff below
         for (auto chordRest : plistChordRests) {
             Arpeggio* arpeggio = arpegMapEntry.first;
-            int span = static_cast<int>(chordRest->staffIdx() - arpeggio->staffIdx()) + 1;
+            int span = static_cast<int>(chordRest->track() - arpeggio->track()) + 1;
             // Adjust the span if it is currently smaller
             if (arpeggio->span() < span) {
                 arpeggio->setSpan(span);

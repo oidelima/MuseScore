@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __NOTE_H__
-#define __NOTE_H__
+#ifndef MU_ENGRAVING_NOTE_H
+#define MU_ENGRAVING_NOTE_H
 
 /**
  \file
@@ -62,16 +62,16 @@ static constexpr int MAX_DOTS = 4;
 //--------------------------------------------------------------------------------
 class LineAttachPoint
 {
-private:
-    EngravingItem* _line = nullptr;
-    PointF _pos = PointF(0.0, 0.0);
-
 public:
     LineAttachPoint(EngravingItem* l, double x, double y)
-        : _line(l), _pos(PointF(x, y)) {}
+        : m_line(l), m_pos(PointF(x, y)) {}
 
-    const EngravingItem* line() const { return _line; }
-    const PointF pos() const { return _pos; }
+    const EngravingItem* line() const { return m_line; }
+    const PointF pos() const { return m_pos; }
+
+private:
+    EngravingItem* m_line = nullptr;
+    PointF m_pos = PointF(0.0, 0.0);
 };
 
 //---------------------------------------------------------
@@ -99,12 +99,12 @@ public:
 //---------------------------------------------------------
 
 struct NoteVal {
-    int pitch                 { -1 };
-    int tpc1                  { Tpc::TPC_INVALID };
-    int tpc2                  { Tpc::TPC_INVALID };
-    int fret                  { INVALID_FRET_INDEX };
-    int string                { INVALID_STRING_INDEX };
-    NoteHeadGroup headGroup { NoteHeadGroup::HEAD_NORMAL };
+    int pitch = -1;
+    int tpc1 = Tpc::TPC_INVALID;
+    int tpc2 = Tpc::TPC_INVALID;
+    int fret = INVALID_FRET_INDEX;
+    int string = INVALID_STRING_INDEX;
+    NoteHeadGroup headGroup = NoteHeadGroup::HEAD_NORMAL;
 
     NoteVal() {}
     NoteVal(int p)
@@ -228,6 +228,7 @@ public:
     int playingOctave() const;
     double tuning() const { return m_tuning; }
     void setTuning(double v) { m_tuning = v; }
+    double playingTuning() const;
     void undoSetTpc(int v);
     int transposition() const;
     bool fixed() const { return m_fixed; }
@@ -269,7 +270,8 @@ public:
     void setFretString(const String& s) { m_fretString = s; }
     bool negativeFretUsed() const;
     int string() const { return m_string; }
-    void setString(int val);
+    void setString(int val) { m_string = val; }
+
     bool ghost() const { return m_ghost; }
     void setGhost(bool val) { m_ghost = val; }
     bool deadNote() const { return m_deadNote; }
@@ -429,6 +431,8 @@ public:
     bool isPreBendStart() const;
     bool isGraceBendStart() const;
 
+    bool hasAnotherStraightAboveOrBelow(bool above) const;
+
     void addLineAttachPoint(mu::PointF point, EngravingItem* line);
     std::vector<LineAttachPoint>& lineAttachPoints() { return m_lineAttachPoints; }
     const std::vector<LineAttachPoint>& lineAttachPoints() const { return m_lineAttachPoints; }
@@ -444,17 +448,12 @@ public:
     void updateFrettingForTiesAndBends();
 
     struct LayoutData : public EngravingItem::LayoutData {
-        ld_field<bool> useTablature = { "Note::useTablature", false };
-        ld_field<SymId> cachedNoteheadSym = { "Note::cachedNoteheadSym", SymId::noSym };    // use in draw to avoid recomputing at every update
-        ld_field<SymId> cachedSymNull = { "Note::cachedSymNull", SymId::noSym };            // additional symbol for some transparent notehead
-        ld_field<bool> mirror = { "Note::mirror", false };                                  // True if note is mirrored at stem.
+        ld_field<bool> useTablature = { "[Note] useTablature", false };
+        ld_field<SymId> cachedNoteheadSym = { "[Note] cachedNoteheadSym", SymId::noSym };    // use in draw to avoid recomputing at every update
+        ld_field<SymId> cachedSymNull = { "[Note] cachedSymNull", SymId::noSym };            // additional symbol for some transparent notehead
+        ld_field<bool> mirror = { "[Note] mirror", false };                                  // True if note is mirrored at stem.
     };
     DECLARE_LAYOUTDATA_METHODS(Note)
-
-    //! --- DEPRECATED ---
-    bool mirror() const { return ldata()->mirror.value(); }
-    void setMirror(bool val) { mutldata()->mirror.set_value(val); }
-    //! ------------------
 
 private:
 

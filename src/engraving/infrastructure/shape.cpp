@@ -101,9 +101,11 @@ void Shape::invalidateBBox()
 
 const RectF& Shape::bbox() const
 {
-    if (type() == Type::Fixed) {
+    if (m_elements.size() == 0) {
         static const RectF _dummy;
-        return m_elements.empty() ? _dummy : m_elements.at(0);
+        return _dummy;
+    } else if (m_elements.size() == 1) {
+        return m_elements.at(0);
     } else {
         if (m_bbox.isNull()) {
             for (const ShapeElement& e : m_elements) {
@@ -491,22 +493,26 @@ void Shape::paint(Painter& painter) const
     }
 }
 
-#ifndef NDEBUG
-//---------------------------------------------------------
-//   dump
-//---------------------------------------------------------
-
-void Shape::dump(const char* p) const
+void mu::engraving::dump(const ShapeElement& se, std::stringstream& ss)
 {
-    LOGD("Shape dump: %p %s size %zu", this, p, size());
-    for (const ShapeElement& r : m_elements) {
-        r.dump();
+    const mu::RectF* r = &se;
+    ss << "item: " << (se.item() ? se.item()->typeName() : "no") << " rect: ";
+    mu::dump(*r, ss);
+}
+
+void mu::engraving::dump(const Shape& sh, std::stringstream& ss)
+{
+    ss << "Shape size: " << sh.size() << "\n";
+    for (const ShapeElement& r : sh.elements()) {
+        ss << "  ";
+        dump(r, ss);
+        ss << "\n";
     }
 }
 
-void ShapeElement::dump() const
+std::string mu::engraving::dump(const Shape& sh)
 {
-    LOGD("   %s: %f %f %f %f", item() ? item()->typeName() : "", x(), y(), width(), height());
+    std::stringstream ss;
+    dump(sh, ss);
+    return ss.str();
 }
-
-#endif

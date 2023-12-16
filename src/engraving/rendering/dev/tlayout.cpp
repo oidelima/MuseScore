@@ -23,7 +23,7 @@
 #include "tlayout.h"
 
 #include "global/realfn.h"
-#include "global/number.h"
+#include "global/types/number.h"
 #include "draw/fontmetrics.h"
 
 #include "iengravingconfiguration.h"
@@ -148,6 +148,7 @@
 
 #include "dom/whammybar.h"
 
+#include "arpeggiolayout.h"
 #include "autoplace.h"
 #include "beamlayout.h"
 #include "chordlayout.h"
@@ -341,6 +342,8 @@ void TLayout::layoutItem(EngravingItem* item, LayoutContext& ctx)
         break;
     case ElementType::PEDAL_SEGMENT:    layoutPedalSegment(item_cast<PedalSegment*>(item), ctx);
         break;
+    case ElementType::PICK_SCRAPE_SEGMENT: layoutPickScrapeSegment(item_cast<PickScrapeSegment*>(item), ctx);
+        break;
     case ElementType::PLAYTECH_ANNOTATION:
         layoutPlayTechAnnotation(item_cast<const PlayTechAnnotation*>(item), static_cast<PlayTechAnnotation::LayoutData*>(ldata));
         break;
@@ -406,7 +409,7 @@ void TLayout::layoutItem(EngravingItem* item, LayoutContext& ctx)
     case ElementType::TIMESIG:
         layoutTimeSig(item_cast<const TimeSig*>(item), static_cast<TimeSig::LayoutData*>(ldata), ctx);
         break;
-    case ElementType::TREMOLO:          layoutTremolo(item_cast<Tremolo*>(item), ctx);
+    case ElementType::TREMOLO:          layoutTremolo(item_cast<TremoloDispatcher*>(item), ctx);
         break;
     case ElementType::TREMOLOBAR:
         layoutTremoloBar(item_cast<const TremoloBar*>(item), static_cast<TremoloBar::LayoutData*>(ldata));
@@ -685,6 +688,7 @@ void TLayout::layoutAmbitus(const Ambitus* item, Ambitus::LayoutData* ldata, con
 void TLayout::layoutArpeggio(const Arpeggio* item, Arpeggio::LayoutData* ldata, const LayoutConfiguration& conf,
                              bool includeCrossStaffHeight)
 {
+    UNUSED(includeCrossStaffHeight);
     //! NOTE Can be edited and relayout,
     //! in this case the reset layout data has not yet been done
 //    if (ldata->isValid()) {
@@ -701,7 +705,9 @@ void TLayout::layoutArpeggio(const Arpeggio* item, Arpeggio::LayoutData* ldata, 
         }
     }
     ldata->setIsSkipDraw(false);
-    ldata->setPos(PointF());
+    if (!ldata->isSetPos()) {
+        ldata->setPos(PointF());
+    }
 
     IF_ASSERT_FAILED(item->explicitParent()) {
         return;
@@ -712,19 +718,16 @@ void TLayout::layoutArpeggio(const Arpeggio* item, Arpeggio::LayoutData* ldata, 
     LD_CONDITION(parentChord->upNote()->ldata()->isSetPos());
     LD_CONDITION(parentChord->downNote()->ldata()->isSetPos());
 
-    auto computeHeight = [](const Arpeggio* item, bool includeCrossStaffHeight) -> double
+    auto computeHeight = [](const Arpeggio* item) -> double
     {
         Chord* chord = item->chord();
         double y = chord->upNote()->pagePos().y() - chord->upNote()->headHeight() * .5;
 
         Note* downNote = chord->downNote();
-        if (includeCrossStaffHeight) {
-            track_idx_t bottomTrack = item->track() + (item->span() - 1) * VOICES;
-            EngravingItem* element = chord->segment()->element(bottomTrack);
-            Chord* bottomChord = (element && element->isChord()) ? toChord(element) : chord;
-            downNote = bottomChord->downNote();
+        EngravingItem* e = chord->segment()->element(item->track() + item->span() - 1);
+        if (e && e->isChord()) {
+            downNote = toChord(e)->downNote();
         }
-
         double h = downNote->pagePos().y() + downNote->headHeight() * .5 - y;
         return h;
     };
@@ -796,7 +799,7 @@ void TLayout::layoutArpeggio(const Arpeggio* item, Arpeggio::LayoutData* ldata, 
         data->symbols.push_back(end);
     };
 
-    ldata->arpeggioHeight = computeHeight(item, includeCrossStaffHeight);
+    ldata->arpeggioHeight = computeHeight(item);
     ldata->top = calcTop(item, conf);
     ldata->bottom = calcBottom(item, ldata->arpeggioHeight, conf);
 
@@ -845,6 +848,15 @@ void TLayout::layoutArpeggio(const Arpeggio* item, Arpeggio::LayoutData* ldata, 
         ldata->setBbox(RectF(0.0, ldata->top, w, ldata->bottom));
     } break;
     }
+
+    // Loop through staves spanned & regenerate chord shape
+    // This makes sure the arpeggio's shape is added to the shape of each chord it spans
+    Chord* chord = item->chord();
+    Segment* seg = chord->segment();
+    staff_idx_t staveSpan = (item->track() + item->span() - 1) / VOICES;
+    for (staff_idx_t staffIdx = item->staffIdx(); staffIdx <= staveSpan; staffIdx++) {
+        seg->createShape(staffIdx);
+    }
 }
 
 void TLayout::layoutArticulation(const Articulation* item, Articulation::LayoutData* ldata)
@@ -857,12 +869,12 @@ void TLayout::layoutArticulation(const Articulation* item, Articulation::LayoutD
     ldata->setPos(PointF());
 
     //! NOTE Must already be set previously
-    LD_CONDITION(ldata->isSetSymId());
+    LD_CONDITION(ldata->symId.has_value());
 
     RectF bbox;
 
     if (item->textType() == ArticulationTextType::NO_TEXT) {
-        bbox = item->symBbox(ldata->symId());
+        bbox = item->symBbox(ldata->symId);
     } else {
         Font scaledFont(item->font());
         scaledFont.setPointSizeF(item->font().pointSizeF() * item->magS());
@@ -941,13 +953,15 @@ void TLayout::layoutBarLine(const BarLine* item, BarLine::LayoutData* ldata, con
         switch (e->type()) {
         case ElementType::ARTICULATION:
             // form Articulation layout
-            LD_CONDITION(item_cast<const Articulation*>(e)->ldata()->isSetSymId());
+            LD_CONDITION(item_cast<const Articulation*>(e)->ldata()->symId.has_value());
             break;
         case ElementType::SYMBOL:
-            // not yet clear
+            LD_INDEPENDENT;
             break;
         case ElementType::IMAGE:
-            // not yet clear
+            // will be done
+            // LD_CONDITION(parentLD->isSetBbox());
+            LD_INDEPENDENT;
             break;
         default:
             UNREACHABLE;
@@ -1008,12 +1022,14 @@ void TLayout::layoutBarLine(const BarLine* item, BarLine::LayoutData* ldata, con
                 aldata->setPos(PointF(x, topY));
             }
         } break;
-        case ElementType::SYMBOL:
-            TLayout::layoutItem(e, const_cast<LayoutContext&>(ctx));
-            break;
-        case ElementType::IMAGE:
-            TLayout::layoutItem(e, const_cast<LayoutContext&>(ctx));
-            break;
+        case ElementType::SYMBOL: {
+            Symbol* sb = item_cast<Symbol*>(e);
+            TLayout::layoutSymbol(sb, sb->mutldata(), ctx);
+        } break;
+        case ElementType::IMAGE: {
+            Image* im = item_cast<Image*>(e);
+            TLayout::layoutImage(im, im->mutldata());
+        } break;
         default:
             UNREACHABLE;
         }
@@ -1373,8 +1389,8 @@ void TLayout::layoutTBox(const TBox* item, FBox::LayoutData* ldata, const Layout
 
 void TLayout::layoutBracket(const Bracket* item, Bracket::LayoutData* ldata, const LayoutConfiguration& conf)
 {
-    LD_CONDITION(ldata->isSetBracketHeight());
-    if (!ldata->isSetBracketHeight()) {
+    LD_CONDITION(ldata->bracketHeight.has_value());
+    if (!ldata->bracketHeight.has_value()) {
         return;
     }
 
@@ -1387,7 +1403,7 @@ void TLayout::layoutBracket(const Bracket* item, Bracket::LayoutData* ldata, con
         if (musicalSymbolFont == "Emmentaler" || musicalSymbolFont == "Gonville") {
             ldata->braceSymbol = SymId::noSym;
             double w = conf.styleMM(Sid::akkoladeWidth);
-            double h2 = ldata->bracketHeight() * 0.5;
+            double h2 = ldata->bracketHeight * 0.5;
 
 #define XM(a) (a + 700) * w / 700
 #define YM(a) (a + 7100) * h2 / 7100
@@ -1417,16 +1433,16 @@ void TLayout::layoutBracket(const Bracket* item, Bracket::LayoutData* ldata, con
             ldata->path = path;
             ldata->setBbox(path.boundingRect());
             ldata->shape.add(ldata->bbox());
-            ldata->setBracketWidth(w + conf.styleMM(Sid::akkoladeBarDistance));
+            ldata->bracketWidth = w + conf.styleMM(Sid::akkoladeBarDistance);
         } else {
             if (item->braceSymbol() == SymId::noSym) {
                 ldata->braceSymbol = SymId::brace;
             }
-            double h = ldata->bracketHeight();
+            double h = ldata->bracketHeight;
             double w = item->symWidth(ldata->braceSymbol) * item->magx();
             ldata->setBbox(RectF(0, 0, w, h));
             ldata->shape.add(ldata->bbox());
-            ldata->setBracketWidth(w + conf.styleMM(Sid::akkoladeBarDistance));
+            ldata->bracketWidth = w + conf.styleMM(Sid::akkoladeBarDistance);
         }
     }
     break;
@@ -1436,28 +1452,28 @@ void TLayout::layoutBracket(const Bracket* item, Bracket::LayoutData* ldata, con
         double x = -w;
 
         double bd = (conf.styleSt(Sid::MusicalSymbolFont) == "Leland") ? spatium * .5 : spatium * .25;
-        ldata->shape.add(RectF(x, -bd, w * 2, 2 * (ldata->bracketHeight() * 0.5 + bd)));
+        ldata->shape.add(RectF(x, -bd, w * 2, 2 * (ldata->bracketHeight * 0.5 + bd)));
         ldata->shape.add(item->symBbox(SymId::bracketTop).translated(PointF(-w, -bd)));
-        ldata->shape.add(item->symBbox(SymId::bracketBottom).translated(PointF(-w, bd + ldata->bracketHeight())));
+        ldata->shape.add(item->symBbox(SymId::bracketBottom).translated(PointF(-w, bd + ldata->bracketHeight)));
 
         w += item->symWidth(SymId::bracketTop);
         double y = -item->symHeight(SymId::bracketTop) - bd;
-        double h = (-y + ldata->bracketHeight() * 0.5) * 2;
+        double h = (-y + ldata->bracketHeight * 0.5) * 2;
         ldata->setBbox(RectF(x, y, w, h));
 
-        ldata->setBracketWidth(conf.styleMM(Sid::bracketWidth) + conf.styleMM(Sid::bracketDistance));
+        ldata->bracketWidth = conf.styleMM(Sid::bracketWidth) + conf.styleMM(Sid::bracketDistance);
     }
     break;
     case BracketType::SQUARE: {
         double w = conf.styleMM(Sid::staffLineWidth) * .5;
         double x = -w;
         double y = -w;
-        double h = (ldata->bracketHeight() * 0.5 + w) * 2;
+        double h = (ldata->bracketHeight * 0.5 + w) * 2;
         w += (.5 * item->spatium() + 3 * w);
         ldata->setBbox(RectF(x, y, w, h));
         ldata->shape.add(ldata->bbox());
 
-        ldata->setBracketWidth(conf.styleMM(Sid::staffLineWidth) / 2 + 0.5 * item->spatium());
+        ldata->bracketWidth = conf.styleMM(Sid::staffLineWidth) / 2 + 0.5 * item->spatium();
     }
     break;
     case BracketType::LINE: {
@@ -1466,11 +1482,11 @@ void TLayout::layoutBracket(const Bracket* item, Bracket::LayoutData* ldata, con
         double x = -w;
         double bd = _spatium * .25;
         double y = -bd;
-        double h = (-y + ldata->bracketHeight() * 0.5) * 2;
+        double h = (-y + ldata->bracketHeight * 0.5) * 2;
         ldata->setBbox(RectF(x, y, w, h));
         ldata->shape.add(ldata->bbox());
 
-        ldata->setBracketWidth(0.67 * conf.styleMM(Sid::bracketWidth) + conf.styleMM(Sid::bracketDistance));
+        ldata->bracketWidth = 0.67 * conf.styleMM(Sid::bracketWidth) + conf.styleMM(Sid::bracketDistance);
     }
     break;
     case BracketType::NO_BRACKET:
@@ -2463,7 +2479,7 @@ void TLayout::layoutFretDiagram(const FretDiagram* item, FretDiagram::LayoutData
         for (EngravingItem* e = pSeg->firstElementOfSegment(pSeg, idx); e; e = pSeg->nextElementOfSegment(pSeg, e, idx)) {
             if (e->isRest()) {
                 const Rest* r = toRest(e);
-                LD_CONDITION(r->ldata()->isSetSym());
+                LD_CONDITION(r->ldata()->sym.has_value());
                 noteheadWidth = item->symWidth(r->ldata()->sym());
                 break;
             } else if (e->isNote()) {
@@ -2521,7 +2537,7 @@ void TLayout::layoutFretDiagram(const FretDiagram* item, FretDiagram::LayoutData
     }
 }
 
-static void _layoutGlissando(const Glissando* item, LayoutContext& ctx, Glissando::LayoutData* ldata)
+static void _layoutGlissando(Glissando* item, LayoutContext& ctx, Glissando::LayoutData* ldata)
 {
     double _spatium = item->spatium();
 
@@ -2532,6 +2548,32 @@ static void _layoutGlissando(const Glissando* item, LayoutContext& ctx, Glissand
         return;
     }
     ldata->setPos(0.0, 0.0);
+
+    String instrId = item->staff()->part()->instrumentId(item->tick());
+    bool harpStaff = instrId == "harp";
+    if (!item->isHarpGliss().has_value()) {
+        item->setIsHarpGliss(harpStaff);
+    } else {
+        if (harpStaff != item->isHarpGliss().value()) {
+            // Preserve whether this gliss has its default playback style
+            bool defaultStyle = false;
+            if (item->isStyled(Pid::GLISS_STYLE)) {
+                defaultStyle = true;
+            }
+            item->setIsHarpGliss(harpStaff);
+            if (defaultStyle) {
+                item->resetProperty(Pid::GLISS_STYLE);
+            }
+
+            // Make sure harp glisses can only be diatonic and chromatic
+            GlissandoStyle glissStyle = item->glissandoStyle();
+            if (item->isHarpGliss().value()
+                && (glissStyle != GlissandoStyle::DIATONIC
+                    && glissStyle != GlissandoStyle::CHROMATIC)) {
+                item->setGlissandoStyle(GlissandoStyle::DIATONIC);
+            }
+        }
+    }
 
     Note* anchor1 = toNote(item->startElement());
     Note* anchor2 = toNote(item->endElement());
@@ -2744,10 +2786,18 @@ void TLayout::layoutGraceNotesGroup(GraceNotesGroup* item, LayoutContext& ctx)
     }
 
     const Segment* appendedSeg = item->appendedSegment();
+    Chord* parentChord = toChord(item->parent());
+    Shape staffShape = appendedSeg->staffShape(parentChord->staffIdx());
+    bool isTabStaff = parentChord->staffType() && parentChord->staffType()->isTabStaff();
+    if (isTabStaff) {
+        staffShape.remove_if([](ShapeElement& el) {
+            // Ignore stems on tab staves
+            return el.item() && el.item()->isStem();
+        });
+    }
     double _shapeSpatium = HorizontalSpacing::shapeSpatium(_shape);
-    double xPos = -HorizontalSpacing::minHorizontalDistance(_shape,
-                                                            appendedSeg->staffShape(item->parent()->staffIdx()),
-                                                            _shapeSpatium);
+    double xPos = -HorizontalSpacing::minHorizontalDistance(_shape, staffShape, _shapeSpatium);
+
     // If the parent chord is cross-staff, also check against shape in the other staff and take the minimum
     if (item->parent()->staffMove() != 0) {
         double xPosCross = -HorizontalSpacing::minHorizontalDistance(_shape,
@@ -2772,6 +2822,10 @@ void TLayout::layoutGraceNotesGroup(GraceNotesGroup* item, LayoutContext& ctx)
     }
 
     item->setPos(xPos, 0.0);
+
+    if (isTabStaff) {
+        ChordLayout::layoutStem(parentChord, ctx);
+    }
 }
 
 void TLayout::layoutGraceNotesGroup2(const GraceNotesGroup* item, GraceNotesGroup::LayoutData* ldata)
@@ -3303,7 +3357,7 @@ void TLayout::layoutHarmony(const Harmony* item, Harmony::LayoutData* ldata, con
             }
 
             ldata->setBbox(bb.translated(xx, yy));
-            ldata->setHarmonyHeight(ldata->bbox().height());
+            ldata->harmonyHeight = ldata->bbox().height();
         }
 
         if (fd) {
@@ -4058,7 +4112,7 @@ void TLayout::layoutMMRest(const MMRest* item, MMRest::LayoutData* ldata, const 
         }
     }
 
-    LD_CONDITION(ldata->isSetRestWidth());
+    LD_CONDITION(ldata->restWidth.has_value());
 
     //! NOTE This is not look like layout data, perhaps this is should be set not here
     ldata->number = item->measure()->mmRestCount();
@@ -4221,7 +4275,9 @@ void TLayout::fillNoteShape(const Note* item, Note::LayoutData* ldata)
         }
     }
 
-    if (item->part()->instrument()->hasStrings() && !item->staffType()->isTabStaff()) {
+    // This method is also called from SingleLayout, where `part` may be nullptr
+    Part* part = item->part();
+    if (part && part->instrument()->hasStrings() && !item->staffType()->isTabStaff()) {
         GuitarBend* bend = item->bendFor();
         if (bend && bend->type() == GuitarBendType::SLIGHT_BEND && !bend->segmentsEmpty()) {
             GuitarBendSegment* bendSeg = toGuitarBendSegment(bend->frontSegment());
@@ -4249,7 +4305,7 @@ void TLayout::layoutNoteDot(const NoteDot* item, NoteDot::LayoutData* ldata)
 
 void TLayout::layoutOrnament(const Ornament* item, Ornament::LayoutData* ldata, const LayoutConfiguration& conf)
 {
-    LD_CONDITION(ldata->isSetSymId());
+    LD_CONDITION(ldata->symId.has_value());
 
     ldata->setShape(Shape());
 
@@ -4581,7 +4637,7 @@ void TLayout::layoutRest(const Rest* item, Rest::LayoutData* ldata, const Layout
     int wholeRestOffset = item->computeWholeRestOffset(voiceOffset, lines);
     int finalLine = naturalLine + voiceOffset + wholeRestOffset;
 
-    ldata->setSym(item->getSymbol(item->durationType().type(), finalLine + userLine, lines));
+    ldata->sym = item->getSymbol(item->durationType().type(), finalLine + userLine, lines);
 
     ldata->setPosY(finalLine * lineDist * spatium);
     if (!item->shouldNotBeDrawn()) {
@@ -4825,7 +4881,7 @@ void TLayout::layoutSlur(Slur* item, LayoutContext& ctx)
 
 void TLayout::layoutSpacer(Spacer* item, LayoutContext&)
 {
-    UNUSED(item);
+    item->layout0();
 }
 
 void TLayout::layoutSpanner(Spanner* item, LayoutContext& ctx)
@@ -5318,7 +5374,7 @@ void TLayout::layoutTabDurationSymbol(const TabDurationSymbol* item, TabDuration
     }
 // if on a chord with special beam mode, layout an 'English'-style duration grid
     else {
-        TablatureDurationFont font = item->tab()->_durationFonts[item->tab()->_durationFontIdx];
+        const TablatureDurationFont& font = item->tab()->tabDurationFont();
         hbb   = font.gridStemHeight * spatium;         // bbox height is stem height
         wbb   = font.gridStemWidth * spatium;          // bbox width is stem width
         xbb   = -wbb * 0.5;                             // bbox is half at left and half at right of stem centre
@@ -5954,7 +6010,7 @@ void TLayout::layoutTimeSig(const TimeSig* item, TimeSig::LayoutData* ldata, con
     }
 }
 
-void TLayout::layoutTremolo(Tremolo* item, LayoutContext& ctx)
+void TLayout::layoutTremolo(TremoloDispatcher* item, LayoutContext& ctx)
 {
     TremoloLayout::layout(item, ctx);
 }

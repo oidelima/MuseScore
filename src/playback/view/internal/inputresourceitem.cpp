@@ -267,9 +267,12 @@ QVariantMap InputResourceItem::buildSoundFontsMenuItem(const ResourceByVendorMap
     });
 
     QVariantList soundFontItems;
+    std::string currentSoundFontId = m_currentInputParams.resourceMeta.id;
 
     for (const String& soundFont : soundFonts) {
-        bool isCurrentSoundFont = currentSoundFontName == soundFont;
+        // currentSoundFontId will be equal to soundFont in the case of "choose automatically" for older files (this is a temporary fix)
+        // See: https://github.com/musescore/MuseScore/pull/20316#issuecomment-1841326774
+        bool isCurrentSoundFont = currentSoundFontName == soundFont || currentSoundFontId == soundFont.toStdString();
 
         if (soundFont == MS_BASIC_SOUNDFONT_NAME) {
             soundFontItems << buildMsBasicMenuItem(resourcesBySoundFont[soundFont], isCurrentSoundFont, currentPreset);
@@ -339,6 +342,12 @@ QVariantMap InputResourceItem::buildMsBasicMenuItem(const AudioResourceMetaList&
 
             QVariantMap menuItem = buildMsBasicItem(subItem, parentMenuId, _ok, isSubItemCurrent);
             if (!_ok) {
+                continue;
+            }
+
+            // Temporary fix, see: https://github.com/musescore/MuseScore/issues/20142
+            String title = menuItem.value("title").toString();
+            if (title.contains(String("Expr."))) {
                 continue;
             }
 

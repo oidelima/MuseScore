@@ -592,6 +592,10 @@ void SystemLayout::hideEmptyStaves(System* system, LayoutContext& ctx, bool isFi
     staff_idx_t staffIdx = 0;
     bool systemIsEmpty = true;
 
+    Fraction stick = system->measures().front()->tick();
+    Fraction etick = system->measures().back()->endTick();
+    auto spanners = ctx.dom().spannerMap().findOverlapping(stick.ticks(), etick.ticks() - 1);
+
     for (const Staff* staff : ctx.dom().staves()) {
         SysStaff* ss  = system->staff(staffIdx);
 
@@ -603,6 +607,14 @@ void SystemLayout::hideEmptyStaves(System* system, LayoutContext& ctx, bool isFi
                 && !(isFirstSystem && ctx.conf().styleB(Sid::dontHideStavesInFirstSystem))
                 && hideMode != Staff::HideMode::NEVER)) {
             bool hideStaff = true;
+            for (auto spanner : spanners) {
+                if (spanner.value->staff() == staff
+                    && !spanner.value->systemFlag()
+                    && !spanner.value->isHairpin()) {
+                    hideStaff = false;
+                    break;
+                }
+            }
             for (MeasureBase* m : system->measures()) {
                 if (!m->isMeasure()) {
                     continue;
@@ -840,8 +852,8 @@ void SystemLayout::layoutSystemElements(System* system, LayoutContext& ctx)
                         }
 
                         // add tremolo to skyline
-                        if (e->isChord() && toChord(e)->tremolo()) {
-                            Tremolo* t = toChord(e)->tremolo();
+                        if (e->isChord() && toChord(e)->tremoloDispatcher()) {
+                            TremoloDispatcher* t = toChord(e)->tremoloDispatcher();
                             Chord* c1 = t->chord1();
                             Chord* c2 = t->chord2();
                             if (!t->twoNotes() || (c1 && !c1->staffMove() && c2 && !c2->staffMove())) {
@@ -1573,8 +1585,8 @@ void SystemLayout::updateCrossBeams(System* system, LayoutContext& ctx)
                         ChordLayout::layoutChords1(ctx, &seg, chord->vStaffIdx());
                         seg.createShape(chord->vStaffIdx());
                     }
-                } else if (chord->tremolo() && chord->tremolo()->twoNotes()) {
-                    Tremolo* t = chord->tremolo();
+                } else if (chord->tremoloDispatcher() && chord->tremoloDispatcher()->twoNotes()) {
+                    TremoloDispatcher* t = chord->tremoloDispatcher();
                     Chord* c1 = t->chord1();
                     Chord* c2 = t->chord2();
                     if (t->userModified() || (c1->staffMove() != 0 || c2->staffMove() != 0)) {
@@ -1903,7 +1915,7 @@ double SystemLayout::totalBracketOffset(LayoutContext& ctx)
                 Bracket* dummyBr = Factory::createBracket(ctx.mutDom().dummyParent(), /*isAccessibleEnabled=*/ false);
                 dummyBr->setBracketItem(bi);
                 dummyBr->setStaffSpan(firstStaff, lastStaff);
-                dummyBr->mutldata()->setBracketHeight(3.5 * dummyBr->spatium() * 2); // default
+                dummyBr->mutldata()->bracketHeight.set_value(3.5 * dummyBr->spatium() * 2); // default
                 TLayout::layoutBracket(dummyBr, dummyBr->mutldata(), ctx.conf());
                 for (staff_idx_t stfIdx = firstStaff; stfIdx <= lastStaff; ++stfIdx) {
                     bracketWidth[stfIdx] += dummyBr->ldata()->bracketWidth();
@@ -1941,7 +1953,7 @@ double SystemLayout::layoutBrackets(System* system, LayoutContext& ctx)
                 }
                 Bracket* b = SystemLayout::createBracket(system, ctx, bi, i, static_cast<int>(staffIdx), bl, system->firstMeasure());
                 if (b != nullptr) {
-                    b->mutldata()->setBracketHeight(3.5 * b->spatium() * 2); // dummy
+                    b->mutldata()->bracketHeight.set_value(3.5 * b->spatium() * 2); // dummy
                     TLayout::layoutBracket(b, b->mutldata(), ctx.conf());
                     bracketWidth[i] = std::max(bracketWidth[i], b->ldata()->bracketWidth());
                 }
@@ -2318,7 +2330,7 @@ void SystemLayout::layoutBracketsVertical(System* system, LayoutContext& ctx)
 
         Bracket::LayoutData* bldata = b->mutldata();
         bldata->setPosY(sy);
-        bldata->setBracketHeight(ey - sy);
+        bldata->bracketHeight = ey - sy;
         TLayout::layoutBracket(b, bldata, ctx.conf());
     }
 }

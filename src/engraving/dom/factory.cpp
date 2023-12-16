@@ -103,6 +103,8 @@
 #include "tie.h"
 #include "timesig.h"
 #include "tremolo.h"
+#include "tremolotwochord.h"
+#include "tremolosinglechord.h"
 #include "tremolobar.h"
 #include "trill.h"
 #include "tripletfeel.h"
@@ -183,7 +185,9 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
             return new NoteDot(dummy->note());
         }
     }
-    case ElementType::TREMOLO:           return new Tremolo(parent->isChord() ? toChord(parent) : dummy->chord());
+    case ElementType::TREMOLO:           return new TremoloDispatcher(parent->isChord() ? toChord(parent) : dummy->chord());
+    case ElementType::TREMOLO_SINGLECHORD: return new TremoloSingleChord(parent->isChord() ? toChord(parent) : dummy->chord());
+    case ElementType::TREMOLO_TWOCHORD:  return new TremoloTwoChord(parent->isChord() ? toChord(parent) : dummy->chord());
     case ElementType::LAYOUT_BREAK:      return new LayoutBreak(parent->isMeasureBase() ? toMeasureBase(parent) : dummy->measure());
     case ElementType::MARKER:            return new Marker(parent);
     case ElementType::JUMP:              return new Jump(parent->isMeasure() ? toMeasure(parent) : dummy->measure());
@@ -232,6 +236,9 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
     case ElementType::TEXTLINE_SEGMENT:
     case ElementType::GLISSANDO_SEGMENT:
     case ElementType::GUITAR_BEND_SEGMENT:
+    case ElementType::GUITAR_BEND_HOLD:
+    case ElementType::GUITAR_BEND_HOLD_SEGMENT:
+    case ElementType::GUITAR_BEND_TEXT:
     case ElementType::SLUR_SEGMENT:
     case ElementType::TIE_SEGMENT:
     case ElementType::STEM_SLASH:
@@ -274,6 +281,7 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
     case ElementType::OSSIA:
     case ElementType::GRACE_NOTES_GROUP:
     case ElementType::ROOT_ITEM:
+    case ElementType::FIGURED_BASS_ITEM:
     case ElementType::DUMMY:
         break;
     }
@@ -297,7 +305,7 @@ EngravingItem* Factory::createItemByName(const AsciiStringView& name, EngravingI
     T* Factory::create##T(P * parent, bool isAccessibleEnabled) \
     { \
         EngravingItem* e = createItem(type, parent, isAccessibleEnabled); \
-        return to##T(e); \
+        return item_cast<T*>(e); \
     } \
 
 #define MAKE_ITEM_IMPL(T, P) \
@@ -607,9 +615,13 @@ CREATE_ITEM_IMPL(TimeSig, ElementType::TIMESIG, Segment, isAccessibleEnabled)
 COPY_ITEM_IMPL(TimeSig)
 MAKE_ITEM_IMPL(TimeSig, Segment)
 
-CREATE_ITEM_IMPL(Tremolo, ElementType::TREMOLO, Chord, isAccessibleEnabled)
-COPY_ITEM_IMPL(Tremolo)
-MAKE_ITEM_IMPL(Tremolo, Chord)
+CREATE_ITEM_IMPL(TremoloDispatcher, ElementType::TREMOLO, Chord, isAccessibleEnabled)
+COPY_ITEM_IMPL(TremoloDispatcher)
+MAKE_ITEM_IMPL(TremoloDispatcher, Chord)
+
+CREATE_ITEM_IMPL(TremoloTwoChord, ElementType::TREMOLO_TWOCHORD, Chord, isAccessibleEnabled)
+
+CREATE_ITEM_IMPL(TremoloSingleChord, ElementType::TREMOLO_SINGLECHORD, Chord, isAccessibleEnabled)
 
 CREATE_ITEM_IMPL(TremoloBar, ElementType::TREMOLOBAR, EngravingItem, isAccessibleEnabled)
 MAKE_ITEM_IMPL(TremoloBar, EngravingItem)

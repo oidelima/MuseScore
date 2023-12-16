@@ -36,6 +36,7 @@
 
 #include "iengravingfont.h"
 
+#include "arpeggio.h"
 #include "bend.h"
 #include "bracket.h"
 #include "chord.h"
@@ -44,6 +45,7 @@
 #include "engravingitem.h"
 #include "excerpt.h"
 #include "fret.h"
+#include "guitarbend.h"
 #include "harmony.h"
 #include "harppedaldiagram.h"
 #include "input.h"
@@ -670,7 +672,7 @@ UndoMacro::ChangesInfo UndoMacro::changesInfo() const
                 continue;
             }
 
-            result.changedItems.push_back(item);
+            result.changedItems.insert(item);
         }
     }
 
@@ -793,6 +795,7 @@ void CloneVoice::redo(EditData*)
 
 AddElement::AddElement(EngravingItem* e)
 {
+    DO_ASSERT_X(!e->generated(), String(u"Generated item %1 passed to AddElement").arg(String::fromAscii(e->typeName())));
     element = e;
 }
 
@@ -945,16 +948,16 @@ static void removeNote(const Note* note)
 {
     Score* score = note->score();
     if (note->tieFor() && note->tieFor()->endNote()) {
-        score->undo(new RemoveElement(note->tieFor()));
+        score->doUndoRemoveElement(note->tieFor());
     }
     if (note->tieBack()) {
-        score->undo(new RemoveElement(note->tieBack()));
+        score->doUndoRemoveElement(note->tieBack());
     }
     for (Spanner* s : note->spannerBack()) {
-        score->undo(new RemoveElement(s));
+        score->doUndoRemoveElement(s);
     }
     for (Spanner* s : note->spannerFor()) {
-        score->undo(new RemoveElement(s));
+        score->doUndoRemoveElement(s);
     }
 }
 
@@ -964,21 +967,32 @@ static void removeNote(const Note* note)
 
 RemoveElement::RemoveElement(EngravingItem* e)
 {
+    DO_ASSERT_X(!e->generated(), String(u"Generated item %1 passed to RemoveElement").arg(String::fromAscii(e->typeName())));
     element = e;
 
     Score* score = element->score();
     if (element->isChordRest()) {
         ChordRest* cr = toChordRest(element);
         if (cr->tuplet() && cr->tuplet()->elements().size() <= 1) {
-            score->undo(new RemoveElement(cr->tuplet()));
+            score->doUndoRemoveElement(cr->tuplet());
         }
         if (e->isChord()) {
             Chord* chord = toChord(e);
             // remove tremolo between 2 notes
-            if (chord->tremolo()) {
-                Tremolo* tremolo = chord->tremolo();
+            if (chord->tremoloDispatcher()) {
+                TremoloDispatcher* tremolo = chord->tremoloDispatcher();
                 if (tremolo->twoNotes()) {
-                    score->undo(new RemoveElement(tremolo));
+                    score->doUndoRemoveElement(tremolo);
+                }
+            }
+            // Move arpeggio down to next available note
+            if (chord->arpeggio()) {
+                chord->arpeggio()->rebaseStartAnchor(AnchorRebaseDirection::DOWN);
+            } else {
+                // If this chord is the end of an arpeggio, move the end of the arpeggio upwards to the next available chord
+                Arpeggio* spanArp = chord->spanArpeggio();
+                if (spanArp && chord->track() == spanArp->endTrack()) {
+                    spanArp->rebaseEndAnchor(AnchorRebaseDirection::UP);
                 }
             }
             for (const Note* note : chord->notes()) {
@@ -1828,6 +1842,7 @@ void ChangeStaffType::flip(EditData*)
     staff->setStaffType(Fraction(0, 1), staffType);
 
     bool invisibleChanged = oldStaffType.invisible() != staffType.invisible();
+    bool fromTabToStandard = oldStaffType.isTabStaff() && !staffType.isTabStaff();
 
     staffType = oldStaffType;
 
@@ -1837,6 +1852,10 @@ void ChangeStaffType::flip(EditData*)
         for (Measure* m = score->firstMeasure(); m; m = m->nextMeasure()) {
             m->staffLines(staffIdx)->setVisible(!staff->isLinesInvisible(Fraction(0, 1)));
         }
+    }
+
+    if (fromTabToStandard) {
+        GuitarBend::adaptBendsFromTabToStandardStaff(staff);
     }
 
     staff->triggerLayout();
@@ -2485,9 +2504,9 @@ void SwapCR::flip(EditData*)
     Segment* s2 = cr2->segment();
     track_idx_t track = cr1->track();
 
-    if (cr1->isChord() && cr2->isChord() && toChord(cr1)->tremolo()
-        && (toChord(cr1)->tremolo() == toChord(cr2)->tremolo())) {
-        Tremolo* t = toChord(cr1)->tremolo();
+    if (cr1->isChord() && cr2->isChord() && toChord(cr1)->tremoloDispatcher()
+        && (toChord(cr1)->tremoloDispatcher() == toChord(cr2)->tremoloDispatcher())) {
+        TremoloDispatcher* t = toChord(cr1)->tremoloDispatcher();
         Chord* c1 = t->chord1();
         Chord* c2 = t->chord2();
         t->setParent(toChord(c2));
@@ -2969,30 +2988,30 @@ void MoveTremolo::redo(EditData*)
     oldC2 = trem->chord2();
 
     // Move tremolo away from old chords
-    trem->chord1()->setTremolo(nullptr);
-    trem->chord2()->setTremolo(nullptr);
+    trem->chord1()->setTremoloDispatcher(nullptr);
+    trem->chord2()->setTremoloDispatcher(nullptr);
 
     // Delete old tremolo on c1 and c2, if present
-    if (c1->tremolo() && (c1->tremolo() != trem)) {
-        if (c2->tremolo() == c1->tremolo()) {
-            c2->tremolo()->setChords(c1, c2);
+    if (c1->tremoloDispatcher() && (c1->tremoloDispatcher() != trem)) {
+        if (c2->tremoloDispatcher() == c1->tremoloDispatcher()) {
+            c2->tremoloDispatcher()->setChords(c1, c2);
         } else {
-            c1->tremolo()->setChords(c1, nullptr);
+            c1->tremoloDispatcher()->setChords(c1, nullptr);
         }
-        Tremolo* oldTremolo  = c1->tremolo();
-        c1->setTremolo(nullptr);
+        TremoloDispatcher* oldTremolo  = c1->tremoloDispatcher();
+        c1->setTremoloDispatcher(nullptr);
         delete oldTremolo;
     }
-    if (c2->tremolo() && (c2->tremolo() != trem)) {
-        c2->tremolo()->setChords(nullptr, c2);
-        Tremolo* oldTremolo  = c2->tremolo();
-        c2->setTremolo(nullptr);
+    if (c2->tremoloDispatcher() && (c2->tremoloDispatcher() != trem)) {
+        c2->tremoloDispatcher()->setChords(nullptr, c2);
+        TremoloDispatcher* oldTremolo  = c2->tremoloDispatcher();
+        c2->setTremoloDispatcher(nullptr);
         delete oldTremolo;
     }
 
     // Move tremolo to new chords
-    c1->setTremolo(trem);
-    c2->setTremolo(trem);
+    c1->setTremoloDispatcher(trem);
+    c2->setTremoloDispatcher(trem);
     trem->setChords(c1, c2);
     trem->setParent(c1);
 
@@ -3010,10 +3029,10 @@ void MoveTremolo::redo(EditData*)
 void MoveTremolo::undo(EditData*)
 {
     // Move tremolo to old position
-    trem->chord1()->setTremolo(nullptr);
-    trem->chord2()->setTremolo(nullptr);
-    oldC1->setTremolo(trem);
-    oldC2->setTremolo(trem);
+    trem->chord1()->setTremoloDispatcher(nullptr);
+    trem->chord2()->setTremoloDispatcher(nullptr);
+    oldC1->setTremoloDispatcher(trem);
+    oldC2->setTremoloDispatcher(trem);
     trem->setChords(oldC1, oldC2);
     trem->setParent(oldC1);
 }
@@ -3046,6 +3065,23 @@ void ChangeHarpPedalState::flip(EditData*)
     diagram->triggerLayout();
 }
 
+std::vector<const EngravingObject*> ChangeHarpPedalState::objectItems() const
+{
+    Part* part = diagram->part();
+    std::vector<const EngravingObject*> objs{ diagram };
+    if (!part) {
+        return objs;
+    }
+
+    HarpPedalDiagram* nextDiagram = part->nextHarpDiagram(diagram->tick());
+    if (nextDiagram) {
+        objs.push_back(nextDiagram);
+    } else {
+        objs.push_back(diagram->score()->lastElement());
+    }
+    return objs;
+}
+
 void ChangeSingleHarpPedal::flip(EditData*)
 {
     HarpStringType f_type = type;
@@ -3057,7 +3093,25 @@ void ChangeSingleHarpPedal::flip(EditData*)
     diagram->setPedal(type, pos);
     type = f_type;
     pos = f_pos;
+
     diagram->triggerLayout();
+}
+
+std::vector<const EngravingObject*> ChangeSingleHarpPedal::objectItems() const
+{
+    Part* part = diagram->part();
+    std::vector<const EngravingObject*> objs{ diagram };
+    if (!part) {
+        return objs;
+    }
+
+    HarpPedalDiagram* nextDiagram = part->nextHarpDiagram(diagram->tick());
+    if (nextDiagram) {
+        objs.push_back(nextDiagram);
+    } else {
+        objs.push_back(diagram->score()->lastElement());
+    }
+    return objs;
 }
 }
 
@@ -3074,4 +3128,12 @@ void ChangeStringData::flip(EditData*)
     }
 
     m_stringData.set(StringData(frets, stringList));
+}
+
+void ChangeSpanArpeggio::flip(EditData*)
+{
+    Arpeggio* f_spanArp = m_chord->spanArpeggio();
+
+    m_chord->setSpanArpeggio(m_spanArpeggio);
+    m_spanArpeggio = f_spanArp;
 }

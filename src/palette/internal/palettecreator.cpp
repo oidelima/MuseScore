@@ -637,7 +637,7 @@ PalettePtr PaletteCreator::newTremoloPalette()
     sp->setVisible(false);
 
     for (int i = int(TremoloType::R8); i <= int(TremoloType::C64); ++i) {
-        auto tremolo = Factory::makeTremolo(gpaletteScore->dummy()->chord());
+        auto tremolo = Factory::makeTremoloDispatcher(gpaletteScore->dummy()->chord());
         tremolo->setTremoloType(TremoloType(i));
         sp->appendElement(tremolo, tremolo->subtypeUserName());
     }
@@ -764,9 +764,6 @@ PalettePtr PaletteCreator::newArticulationsPalette(bool defaultPalette)
     }
 
     if (!defaultPalette) {
-        auto bend = Factory::makeGuitarBend(gpaletteScore->dummy()->note());
-        sp->appendElement(bend, QT_TRANSLATE_NOOP("palette", "Bend"));
-
         auto tb = Factory::makeTremoloBar(gpaletteScore->dummy());
         tb->points().push_back(PitchValue(0,     0, false));       // "Dip"
         tb->points().push_back(PitchValue(30, -100, false));
@@ -1480,6 +1477,20 @@ PalettePtr PaletteCreator::newTempoPalette(bool defaultPalette)
         sp->appendElement(item, pair.second, 1.3)->yoffset = 0.4;
     }
 
+    const char* aTempoStr = QT_TRANSLATE_NOOP("palette", "a tempo");
+    auto aTempoTxt = makeElement<TempoText>(gpaletteScore);
+    aTempoTxt->setFollowText(true);
+    aTempoTxt->setXmlText(aTempoStr);
+    aTempoTxt->setATempo();
+    sp->appendElement(aTempoTxt, aTempoStr, 1.3);
+
+    const char* tempoPrimoStr = QT_TRANSLATE_NOOP("palette", "tempo primo");
+    auto tempoPrimoTxt = makeElement<TempoText>(gpaletteScore);
+    tempoPrimoTxt->setFollowText(true);
+    tempoPrimoTxt->setXmlText(tempoPrimoStr);
+    tempoPrimoTxt->setTempoPrimo();
+    sp->appendElement(tempoPrimoTxt, tempoPrimoStr, 1.3);
+
     auto stxt = makeElement<SystemText>(gpaletteScore);
     stxt->setTextStyleType(TextStyleType::TEMPO);
     stxt->setXmlText(String::fromAscii(QT_TRANSLATE_NOOP("palette", "Swing")));
@@ -1841,17 +1852,17 @@ PalettePtr PaletteCreator::newGuitarPalette(bool defaultPalette)
 
     auto capo = makeElement<Capo>(gpaletteScore);
     capo->setXmlText(String::fromAscii(QT_TRANSLATE_NOOP("palette", "Capo")));
-    sp->appendElement(capo, QT_TRANSLATE_NOOP("palette", "Capo"))->setElementTranslated(true);
+    sp->appendElement(capo, QT_TRANSLATE_NOOP("palette", "Capo"), 0.9)->setElementTranslated(true);
 
     auto stringTunings = makeElement<StringTunings>(gpaletteScore);
     stringTunings->setXmlText(u"<sym>guitarString6</sym> - D");
-    stringTunings->initTextStyleType(TextStyleType::STAFF);
-    sp->appendElement(stringTunings, QT_TRANSLATE_NOOP("palette", "String tunings"))->setElementTranslated(true);
+    stringTunings->initTextStyleType(TextStyleType::STRING_TUNINGS);
+    sp->appendElement(stringTunings, QT_TRANSLATE_NOOP("palette", "String tunings"), 0.9)->setElementTranslated(true);
 
-    sp->appendActionIcon(ActionIconType::STANDARD_BEND, "standard-bend", 1.25);
-    sp->appendActionIcon(ActionIconType::PRE_BEND, "pre-bend", 1.25);
-    sp->appendActionIcon(ActionIconType::GRACE_NOTE_BEND, "grace-note-bend", 1.25);
-    sp->appendActionIcon(ActionIconType::SLIGHT_BEND, "slight-bend", 1.25);
+    sp->appendActionIcon(ActionIconType::STANDARD_BEND, "standard-bend", 1.5);
+    sp->appendActionIcon(ActionIconType::PRE_BEND, "pre-bend", 1.5);
+    sp->appendActionIcon(ActionIconType::GRACE_NOTE_BEND, "grace-note-bend", 1.4);
+    sp->appendActionIcon(ActionIconType::SLIGHT_BEND, "slight-bend", 1.5);
 
     const char* finger = "pimac";
     for (unsigned i = 0; i < strlen(finger); ++i) {

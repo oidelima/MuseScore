@@ -122,14 +122,14 @@ void Rest::setOffset(const mu::PointF& o)
 
     LayoutData* ldata = mutldata();
 
-    if (ldata->sym() == SymId::restWhole && (line <= -2 || line >= 3)) {
-        ldata->setSym(SymId::restWholeLegerLine);
-    } else if (ldata->sym() == SymId::restWholeLegerLine && (line > -2 && line < 4)) {
-        ldata->setSym(SymId::restWhole);
-    } else if (ldata->sym() == SymId::restHalf && (line <= -3 || line >= 3)) {
-        ldata->setSym(SymId::restHalfLegerLine);
-    } else if (ldata->sym() == SymId::restHalfLegerLine && (line > -3 && line < 3)) {
-        ldata->setSym(SymId::restHalf);
+    if (ldata->sym == SymId::restWhole && (line <= -2 || line >= 3)) {
+        ldata->sym = SymId::restWholeLegerLine;
+    } else if (ldata->sym == SymId::restWholeLegerLine && (line > -2 && line < 4)) {
+        ldata->sym = SymId::restWhole;
+    } else if (ldata->sym == SymId::restHalf && (line <= -3 || line >= 3)) {
+        ldata->sym = SymId::restHalfLegerLine;
+    } else if (ldata->sym == SymId::restHalfLegerLine && (line > -3 && line < 3)) {
+        ldata->sym = SymId::restHalf;
     }
 
     EngravingItem::setOffset(o);
@@ -272,12 +272,6 @@ EngravingItem* Rest::drop(EditData& data)
         }
         break;
     }
-    case ElementType::SYMBOL:
-    case ElementType::IMAGE:
-        e->setParent(this);
-        score()->undoAddElement(e);
-        return e;
-
     case ElementType::STRING_TUNINGS:
         return measure()->drop(data);
 
@@ -333,21 +327,21 @@ SymId Rest::getSymbol(DurationType type, int line, int lines) const
 
 void Rest::updateSymbol(int line, int lines, LayoutData* ldata) const
 {
-    ldata->setSym(getSymbol(durationType().type(), line, lines));
+    ldata->sym = getSymbol(durationType().type(), line, lines);
 }
 
 double Rest::symWidthNoLedgerLines(LayoutData* ldata) const
 {
-    if (ldata->sym() == SymId::restHalfLegerLine) {
+    if (ldata->sym == SymId::restHalfLegerLine) {
         return symWidth(SymId::restHalf);
     }
-    if (ldata->sym() == SymId::restWholeLegerLine) {
+    if (ldata->sym == SymId::restWholeLegerLine) {
         return symWidth(SymId::restWhole);
     }
-    if (ldata->sym() == SymId::restDoubleWholeLegerLine) {
+    if (ldata->sym == SymId::restDoubleWholeLegerLine) {
         return symWidth(SymId::restDoubleWhole);
     }
-    return symWidth(ldata->sym());
+    return symWidth(ldata->sym);
 }
 
 //---------------------------------------------------------
@@ -680,7 +674,7 @@ PointF Rest::stemPos() const
 PointF Rest::stemPosBeam() const
 {
     PointF p(pagePos());
-    if (m_up) {
+    if (ldata()->up) {
         p.ry() += ldata()->bbox().top() + spatium() * 1.5;
     } else {
         p.ry() += ldata()->bbox().bottom() - spatium() * 1.5;
@@ -694,7 +688,7 @@ PointF Rest::stemPosBeam() const
 
 double Rest::stemPosX() const
 {
-    if (m_up) {
+    if (ldata()->up) {
         return ldata()->bbox().right();
     } else {
         return ldata()->bbox().left();
@@ -790,12 +784,6 @@ void Rest::add(EngravingItem* e)
         break;
     case ElementType::DEAD_SLAPPED:
         m_deadSlapped = toDeadSlapped(e);
-    // fallthrough
-    case ElementType::SYMBOL:
-    case ElementType::IMAGE:
-        addEl(e);
-        e->added();
-        break;
     default:
         ChordRest::add(e);
         break;

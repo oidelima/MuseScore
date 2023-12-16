@@ -231,7 +231,7 @@ bool Read410::readScore410(Score* score, XmlReader& e, ReadContext& ctx)
         } else if (tag == "name") {
             String n = e.readText();
             if (!score->isMaster()) {     //ignore the name if it's not a child score
-                score->excerpt()->setName(n);
+                score->excerpt()->setName(n, /*saveAndNotify=*/ false);
             }
         } else if (tag == "layoutMode") {
             String s = e.readText();
@@ -465,7 +465,7 @@ bool Read410::pasteStaff(XmlReader& e, Segment* dst, staff_idx_t dstStaff, Fract
                         if (tuplet) {
                             cr->readAddTuplet(tuplet);
                         }
-                        ctx.incTick(cr->actualTicks());
+                        ctx.incTick(cr->actualTicksAt(tick));
                         if (doScale) {
                             Fraction d = cr->durationTypeTicks();
                             cr->setTicks(cr->ticks() * scale);
@@ -479,7 +479,7 @@ bool Read410::pasteStaff(XmlReader& e, Segment* dst, staff_idx_t dstStaff, Fract
                             // disallow tie across barline within two-note tremolo
                             // tremolos can potentially still straddle the barline if no tie is required
                             // but these will be removed later
-                            Tremolo* t = chord->tremolo();
+                            TremoloDispatcher* t = chord->tremoloDispatcher();
                             if (t && t->twoNotes()) {
                                 if (doScale) {
                                     Fraction d = t->durationType().ticks();
@@ -528,7 +528,7 @@ bool Read410::pasteStaff(XmlReader& e, Segment* dst, staff_idx_t dstStaff, Fract
                                     }
                                     if (crt && crt->isChord()) {
                                         Chord* chrt = toChord(crt);
-                                        Tremolo* tr = chrt->tremolo();
+                                        TremoloDispatcher* tr = chrt->tremoloDispatcher();
                                         if (tr) {
                                             tr->setChords(chrt, toChord(cr));
                                             chrt->remove(tr);
@@ -713,6 +713,12 @@ bool Read410::pasteStaff(XmlReader& e, Segment* dst, staff_idx_t dstStaff, Fract
         if (endStaff > score->nstaves()) {
             endStaff = score->nstaves();
         }
+
+        if (score->cmdState().layoutRange()) {
+            score->cmdState().reset();
+            score->setLayout(dstTick, dstTick + tickLen, dstStaff, endStaff, dst);
+        }
+
         //check and add truly invisible rests instead of gaps
         //TODO: look if this could be done different
         Measure* dstM = score->tick2measure(dstTick);

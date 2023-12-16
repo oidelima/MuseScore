@@ -80,6 +80,7 @@
 #include "dom/textline.h"
 #include "dom/textlinebase.h"
 #include "dom/timesig.h"
+#include "dom/tremolo.h"
 #include "dom/tremolobar.h"
 #include "dom/trill.h"
 #include "dom/vibrato.h"
@@ -152,6 +153,8 @@ void SingleLayout::layoutItem(EngravingItem* item)
         break;
     case ElementType::HARP_DIAGRAM: layout(toHarpPedalDiagram(item), ctx);
         break;
+    case ElementType::IMAGE:        layout(toImage(item), ctx);
+        break;
     case ElementType::INSTRUMENT_CHANGE: layout(toInstrumentChange(item), ctx);
         break;
     case ElementType::JUMP:         layout(toJump(item), ctx);
@@ -204,7 +207,7 @@ void SingleLayout::layoutItem(EngravingItem* item)
         break;
     case ElementType::TIMESIG:      layout(toTimeSig(item), ctx);
         break;
-    case ElementType::TREMOLO:      layout(toTremolo(item), ctx);
+    case ElementType::TREMOLO:      layout(item_cast<TremoloDispatcher*>(item), ctx);
         break;
     case ElementType::TREMOLOBAR:   layout(toTremoloBar(item), ctx);
         break;
@@ -682,7 +685,8 @@ void SingleLayout::layout(Bracket* item, const Context& ctx)
 {
     Bracket::LayoutData* ldata = item->mutldata();
 
-    ldata->setBracketHeight(3.5 * item->spatium() * 2);
+    ldata->bracketHeight = 3.5 * item->spatium() * 2;
+    ldata->braceSymbol = item->braceSymbol();
 
     Shape shape;
 
@@ -691,11 +695,11 @@ void SingleLayout::layout(Bracket* item, const Context& ctx)
         if (item->braceSymbol() == SymId::noSym) {
             ldata->braceSymbol = SymId::brace;
         }
-        double h = ldata->bracketHeight();
+        double h = ldata->bracketHeight;
         double w = item->symWidth(ldata->braceSymbol) * item->magx();
         ldata->setBbox(RectF(0, 0, w, h));
         ldata->shape.add(ldata->bbox());
-        ldata->setBracketWidth(w + ctx.style().styleMM(Sid::akkoladeBarDistance));
+        ldata->bracketWidth = w + ctx.style().styleMM(Sid::akkoladeBarDistance);
     }
     break;
     case BracketType::NORMAL: {
@@ -704,28 +708,28 @@ void SingleLayout::layout(Bracket* item, const Context& ctx)
         double x = -w;
 
         double bd = spatium * 0.5;
-        shape.add(RectF(x, -bd, w * 2, 2 * (item->h2() + bd)));
+        shape.add(RectF(x, -bd, w * 2, 2 * (item->ldata()->h2() + bd)));
         shape.add(item->symBbox(SymId::bracketTop).translated(PointF(-w, -bd)));
-        shape.add(item->symBbox(SymId::bracketBottom).translated(PointF(-w, bd + 2 * item->h2())));
+        shape.add(item->symBbox(SymId::bracketBottom).translated(PointF(-w, bd + 2 * item->ldata()->h2())));
 
         w += item->symWidth(SymId::bracketTop);
         double y = -item->symHeight(SymId::bracketTop) - bd;
-        double h = (-y + item->h2()) * 2;
+        double h = (-y + item->ldata()->h2()) * 2;
         ldata->setBbox(x, y, w, h);
 
-        ldata->setBracketWidth(ctx.style().styleMM(Sid::bracketWidth) + ctx.style().styleMM(Sid::bracketDistance));
+        ldata->bracketWidth = ctx.style().styleMM(Sid::bracketWidth) + ctx.style().styleMM(Sid::bracketDistance);
     }
     break;
     case BracketType::SQUARE: {
         double w = ctx.style().styleMM(Sid::staffLineWidth) * .5;
         double x = -w;
         double y = -w;
-        double h = (item->h2() + w) * 2;
+        double h = (item->ldata()->h2() + w) * 2;
         w += (0.5 * item->spatium() + 3 * w);
         ldata->setBbox(x, y, w, h);
         shape.add(item->ldata()->bbox());
 
-        ldata->setBracketWidth(ctx.style().styleMM(Sid::staffLineWidth) / 2 + 0.5 * item->spatium());
+        ldata->bracketWidth = ctx.style().styleMM(Sid::staffLineWidth) / 2 + 0.5 * item->spatium();
     }
     break;
     case BracketType::LINE: {
@@ -734,11 +738,11 @@ void SingleLayout::layout(Bracket* item, const Context& ctx)
         double x = -w;
         double bd = spatium * 0.25;
         double y = -bd;
-        double h = (-y + item->h2()) * 2;
+        double h = (-y + item->ldata()->h2()) * 2;
         ldata->setBbox(x, y, w, h);
         shape.add(item->ldata()->bbox());
 
-        ldata->setBracketWidth(0.67 * ctx.style().styleMM(Sid::bracketWidth) + ctx.style().styleMM(Sid::bracketDistance));
+        ldata->bracketWidth = 0.67 * ctx.style().styleMM(Sid::bracketWidth) + ctx.style().styleMM(Sid::bracketDistance);
     }
     break;
     case BracketType::NO_BRACKET:
@@ -762,6 +766,7 @@ void SingleLayout::layout(Chord* item, const Context& ctx)
 {
     LayoutContext tctx(ctx.dontUseScore());
     ChordLayout::layout(item, tctx);
+    ChordLayout::layoutStem(item, tctx);
 }
 
 void SingleLayout::layout(ChordLine* item, const Context& ctx)
@@ -1098,6 +1103,17 @@ void SingleLayout::layout(HarpPedalDiagram* item, const Context& ctx)
 {
     item->updateDiagramText();
     layoutTextBase(item, ctx, item->mutldata());
+}
+
+void SingleLayout::layout(Image* item, const Context&)
+{
+    item->init();
+
+    SizeF imageSize = item->size();
+
+    Image::LayoutData* ldata = item->mutldata();
+    ldata->setPos(PointF());
+    ldata->setBbox(RectF(PointF(), item->size2pixel(imageSize)));
 }
 
 void SingleLayout::layout(InstrumentChange* item, const Context& ctx)
@@ -1559,7 +1575,7 @@ void SingleLayout::layout(TimeSig* item, const Context& ctx)
     }
 }
 
-void SingleLayout::layout(Tremolo* item, const Context& ctx)
+void SingleLayout::layout(TremoloDispatcher* item, const Context& ctx)
 {
     //! TODO
     LayoutContext tctx(ctx.dontUseScore());
