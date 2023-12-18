@@ -33,7 +33,7 @@
 #include "dom/segment.h"
 #include "dom/tempo.h"
 #include "dom/tie.h"
-#include "dom/tremolo.h"
+#include "dom/tremolotwochord.h"
 
 #include "log.h"
 
@@ -541,7 +541,7 @@ bool PlaybackModel::hasToReloadTracks(const ScoreChangesRange& changesRange) con
     return false;
 }
 
-bool PlaybackModel::hasToReloadScore(const std::unordered_set<ElementType>& changedTypes) const
+bool PlaybackModel::hasToReloadScore(const ScoreChangesRange& changesRange) const
 {
     static const std::unordered_set<ElementType> REQUIRED_TYPES = {
         ElementType::SCORE,
@@ -558,11 +558,24 @@ bool PlaybackModel::hasToReloadScore(const std::unordered_set<ElementType>& chan
     };
 
     for (const ElementType type : REQUIRED_TYPES) {
-        if (changedTypes.find(type) == changedTypes.cend()) {
+        if (changesRange.changedTypes.find(type) == changesRange.changedTypes.cend()) {
             continue;
         }
 
         return true;
+    }
+
+    static const std::unordered_set<mu::engraving::Pid> REQUIRED_PROPERTIES {
+        mu::engraving::Pid::REPEAT_START,
+        mu::engraving::Pid::REPEAT_END,
+        mu::engraving::Pid::REPEAT_JUMP,
+        mu::engraving::Pid::REPEAT_COUNT,
+    };
+
+    for (const Pid pid: changesRange.changedPropertyIdSet) {
+        if (mu::contains(REQUIRED_PROPERTIES, pid)) {
+            return true;
+        }
     }
 
     return false;
@@ -747,7 +760,7 @@ PlaybackModel::TrackBoundaries PlaybackModel::trackBoundaries(const ScoreChanges
     result.trackFrom = staff2track(changesRange.staffIdxFrom, 0);
     result.trackTo = staff2track(changesRange.staffIdxTo, VOICES);
 
-    if (hasToReloadScore(changesRange.changedTypes) || !changesRange.isValidBoundary()) {
+    if (hasToReloadScore(changesRange) || !changesRange.isValidBoundary()) {
         result.trackFrom = 0;
         result.trackTo = m_score->ntracks();
     }
@@ -763,7 +776,7 @@ PlaybackModel::TickBoundaries PlaybackModel::tickBoundaries(const ScoreChangesRa
     result.tickTo = changesRange.tickTo;
 
     if (hasToReloadTracks(changesRange)
-        || hasToReloadScore(changesRange.changedTypes)
+        || hasToReloadScore(changesRange)
         || !changesRange.isValidBoundary()) {
         const Measure* lastMeasure = m_score->lastMeasure();
         result.tickFrom = 0;
@@ -776,11 +789,11 @@ PlaybackModel::TickBoundaries PlaybackModel::tickBoundaries(const ScoreChangesRa
         if (item->isNote()) {
             const Note* note = toNote(item);
             const Chord* chord = note->chord();
-            const TremoloDispatcher* tremolo = chord->tremoloDispatcher();
+            const TremoloTwoChord* tremoloTwo = chord->tremoloTwoChord();
 
-            if (tremolo && tremolo->twoNotes()) {
-                const Chord* startChord = tremolo->chord1();
-                const Chord* endChord = tremolo->chord2();
+            if (tremoloTwo) {
+                const Chord* startChord = tremoloTwo->chord1();
+                const Chord* endChord = tremoloTwo->chord2();
 
                 IF_ASSERT_FAILED(startChord && endChord) {
                     continue;

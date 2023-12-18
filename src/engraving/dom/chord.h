@@ -51,10 +51,8 @@ class Stem;
 class StemSlash;
 class StretchedBend;
 class TremoloDispatcher;
-
-enum class TremoloChordType : char {
-    TremoloSingle, TremoloFirstNote, TremoloSecondNote
-};
+class TremoloTwoChord;
+class TremoloSingleChord;
 
 class GraceNotesGroup final : public std::vector<Chord*>, public EngravingItem
 {
@@ -166,7 +164,11 @@ public:
     Arpeggio* spanArpeggio() const { return m_spanArpeggio; }
     void setSpanArpeggio(Arpeggio* a) { m_spanArpeggio = a; }
     void undoChangeSpanArpeggio(Arpeggio* a);
+
     TremoloDispatcher* tremoloDispatcher() const { return m_tremoloDispatcher; }
+    TremoloType tremoloType() const;
+    TremoloTwoChord* tremoloTwoChord() const;
+    TremoloSingleChord* tremoloSingleChord() const;
     void setTremoloDispatcher(TremoloDispatcher* t, bool applyLogic = true);
 
     ChordLine* chordLine() const;

@@ -57,6 +57,8 @@
 #include "system.h"
 #include "tie.h"
 #include "tremolo.h"
+#include "tremolosinglechord.h"
+#include "tremolotwochord.h"
 #include "trill.h"
 #include "tuplet.h"
 #include "undo.h"
@@ -574,9 +576,26 @@ double Chord::rightEdge() const
     return right;
 }
 
-//---------------------------------------------------------
-//   setTremolo
-//---------------------------------------------------------
+TremoloType Chord::tremoloType() const
+{
+    if (tremoloSingleChord()) {
+        return tremoloSingleChord()->tremoloType();
+    } else if (tremoloTwoChord()) {
+        return tremoloTwoChord()->tremoloType();
+    } else {
+        return TremoloType::INVALID_TREMOLO;
+    }
+}
+
+TremoloTwoChord* Chord::tremoloTwoChord() const
+{
+    return m_tremoloDispatcher ? m_tremoloDispatcher->twoChord : nullptr;
+}
+
+TremoloSingleChord* Chord::tremoloSingleChord() const
+{
+    return m_tremoloDispatcher ? m_tremoloDispatcher->singleChord : nullptr;
+}
 
 void Chord::setTremoloDispatcher(TremoloDispatcher* tr, bool applyLogic)
 {
@@ -1733,7 +1752,7 @@ void Chord::scanElements(void* data, void (* func)(void*, EngravingItem*), bool 
     if (m_arpeggio) {
         func(data, m_arpeggio);
     }
-    if (m_tremoloDispatcher && (tremoloChordType() != TremoloChordType::TremoloSecondNote)) {
+    if (m_tremoloDispatcher && (tremoloChordType() != TremoloChordType::TremoloSecondChord)) {
         func(data, m_tremoloDispatcher);
     }
     const Staff* st = staff();
@@ -2013,7 +2032,7 @@ void Chord::localSpatiumChanged(double oldValue, double newValue)
     if (arpeggio()) {
         arpeggio()->localSpatiumChanged(oldValue, newValue);
     }
-    if (m_tremoloDispatcher && (tremoloChordType() != TremoloChordType::TremoloSecondNote)) {
+    if (m_tremoloDispatcher && (tremoloChordType() != TremoloChordType::TremoloSecondChord)) {
         m_tremoloDispatcher->localSpatiumChanged(oldValue, newValue);
     }
     for (EngravingItem* e : articulations()) {
@@ -2690,9 +2709,9 @@ TremoloChordType Chord::tremoloChordType() const
 {
     if (m_tremoloDispatcher && m_tremoloDispatcher->twoNotes()) {
         if (m_tremoloDispatcher->chord1() == this) {
-            return TremoloChordType::TremoloFirstNote;
+            return TremoloChordType::TremoloFirstChord;
         } else if (m_tremoloDispatcher->chord2() == this) {
-            return TremoloChordType::TremoloSecondNote;
+            return TremoloChordType::TremoloSecondChord;
         } else {
             ASSERT_X(String(u"Chord::tremoloChordType(): inconsistency"));
         }

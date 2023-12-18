@@ -1,5 +1,8 @@
 #include "compatmidirender.h"
 
+#include "dom/tremolosinglechord.h"
+#include "dom/tremolotwochord.h"
+
 namespace mu::engraving {
 void CompatMidiRender::renderScore(Score* score, EventsHolder& events, const CompatMidiRendererInternal::Context& ctx, bool expandRepeats)
 {
@@ -197,7 +200,7 @@ std::vector<NoteEventList> CompatMidiRender::renderChord(Chord* chord, Chord* pr
         }
         // If we are here then we still need to render the note.
         // Render its body if necessary and apply gateTime.
-        if (el->empty() && chord->tremoloChordType() != TremoloChordType::TremoloSecondNote) {
+        if (el->empty() && chord->tremoloChordType() != TremoloChordType::TremoloSecondChord) {
             el->push_back(NoteEvent(0, ontime, 1000 - trailtime,
                                     !note->ghost() ? NoteEvent::DEFAULT_VELOCITY_MULTIPLIER : NoteEvent::GHOST_VELOCITY_MULTIPLIER));
 
@@ -273,29 +276,46 @@ void CompatMidiRender::renderArpeggio(Chord* chord, std::vector<NoteEventList>& 
 
 void CompatMidiRender::renderTremolo(Chord* chord, std::vector<NoteEventList>& ell, int& ontime, double tremoloPartOfChord /* = 1.0 */)
 {
+    struct TremoloAdapter {
+        TremoloSingleChord* singleChord = nullptr;
+        TremoloTwoChord* twoChord = nullptr;
+        TremoloAdapter(TremoloSingleChord* s, TremoloTwoChord* t)
+            : singleChord(s), twoChord(t) {}
+
+        TremoloType tremoloType() const
+        {
+            return singleChord ? singleChord->tremoloType()
+                   : (twoChord ? twoChord->tremoloType() : TremoloType::INVALID_TREMOLO);
+        }
+
+        int lines() const { return singleChord ? singleChord->lines() : (twoChord ? twoChord->lines() : 0); }
+    };
+
+    TremoloAdapter tremolo = TremoloAdapter(chord->tremoloSingleChord(), chord->tremoloTwoChord());
+
     Segment* seg = chord->segment();
-    TremoloDispatcher* tremolo = chord->tremoloDispatcher();
+    //TremoloDispatcher* tremolo = chord->tremoloDispatcher();
     int notes = int(chord->notes().size());
 
     // check if tremolo was rendered before for drum staff
     const Drumset* ds = CompatMidiRender::getDrumset(chord);
     if (ds) {
         for (mu::engraving::Note* n : chord->notes()) {
-            DrumInstrumentVariant div = ds->findVariant(n->pitch(), chord->articulations(), chord->tremoloDispatcher());
-            if (div.pitch != INVALID_PITCH && div.tremolo == tremolo->tremoloType()) {
+            DrumInstrumentVariant div = ds->findVariant(n->pitch(), chord->articulations(), tremolo.tremoloType());
+            if (div.pitch != INVALID_PITCH && div.tremolo == tremolo.tremoloType()) {
                 return;             // already rendered
             }
         }
     }
 
     // we cannot render buzz roll with MIDI events only
-    if (tremolo->tremoloType() == TremoloType::BUZZ_ROLL) {
+    if (tremolo.tremoloType() == TremoloType::BUZZ_ROLL) {
         return;
     }
 
     // render tremolo with multiple events
-    if (chord->tremoloChordType() == TremoloChordType::TremoloFirstNote) {
-        int t = Constants::DIVISION / (1 << (tremolo->lines() + chord->durationType().hooks()));
+    if (chord->tremoloChordType() == TremoloChordType::TremoloFirstChord) {
+        int t = Constants::DIVISION / (1 << (tremolo.lines() + chord->durationType().hooks()));
         if (t == 0) {       // avoid crash on very short tremolo
             t = 1;
         }
@@ -365,13 +385,13 @@ void CompatMidiRender::renderTremolo(Chord* chord, std::vector<NoteEventList>& e
         } else {
             LOGD("Chord::renderTremolo: cannot find 2. chord");
         }
-    } else if (chord->tremoloChordType() == TremoloChordType::TremoloSecondNote) {
+    } else if (chord->tremoloChordType() == TremoloChordType::TremoloSecondChord) {
         for (int k = 0; k < notes; ++k) {
             NoteEventList* events = &(ell)[k];
             events->clear();
         }
     } else if (chord->tremoloChordType() == TremoloChordType::TremoloSingle) {
-        int t = Constants::DIVISION / (1 << (tremolo->lines() + chord->durationType().hooks()));
+        int t = Constants::DIVISION / (1 << (tremolo.lines() + chord->durationType().hooks()));
         if (t == 0) {       // avoid crash on very short tremolo
             t = 1;
         }
