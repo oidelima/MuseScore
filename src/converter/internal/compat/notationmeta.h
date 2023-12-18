@@ -47,6 +47,7 @@ private:
     static QJsonObject typeDataJson(mu::engraving::Score* score);
     static QJsonArray measuresJsonArray(const mu::engraving::Score* score);
     static QJsonArray measuresIndexOrder(const mu::engraving::Score* score);
+    static QJsonArray notesInfoJsonArray(const mu::engraving::Score* score);
 };
 }
 

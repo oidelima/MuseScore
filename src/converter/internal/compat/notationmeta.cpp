@@ -81,15 +81,14 @@ mu::RetVal<std::string> NotationMeta::metaJson(notation::INotationPtr notation)
 
     // Measures metadata
     json["measures"] = measuresJsonArray(score);
+    json["notes"] = notesInfoJsonArray(score); 
     json["measuresIndexOrder"] = measuresIndexOrder(score);
     json["pageHeight"] = ((score->style()).styleD(mu::engraving::Sid::pageHeight)) * mu::engraving::DPI;
     json["pageWidth"] = ((score->style()).styleD(mu::engraving::Sid::pageWidth)) * mu::engraving::DPI;
 
-
     RetVal<std::string> result;
     result.ret = make_ret(Ret::Code::Ok);
     result.val = QJsonDocument(json).toJson().toStdString();
-
     return result;
 }
 
@@ -285,6 +284,52 @@ QJsonArray NotationMeta::measuresIndexOrder(const mu::engraving::Score* score)
     }
     return measuresIndexOrder;
 
+}
+
+QJsonArray NotationMeta::notesInfoJsonArray(const mu::engraving::Score* score)
+{
+    QJsonArray jsonNotesArray;
+    const std::vector<Page*>& pages = score->pages();
+
+    size_t staves = score->nstaves();
+    size_t tracks = staves * mu::engraving::VOICES;
+
+    for (int pi = 0; pi < pages.size(); pi++) {
+        Page* page = pages[pi];
+        std::vector<System*> systems = page->systems();
+
+        for (System* system : page->systems()) {
+            for (MeasureBase* measure : system->measures()) {
+                
+                if (measure->isMeasure()) {
+                    SegmentList segments = toMeasure(measure)->segments();
+                    for (Segment& segment : segments) {
+
+                        for (size_t track = 0; track < tracks; ++track) {
+                            EngravingItem* el = segment.element(track);
+                            if (el && el->isChord()) {
+                                Chord* chord = toChord(el);
+                                staff_idx_t staff_idx = chord->vStaffIdx();
+                                std::vector<Note*> notes = chord->notes();
+                                for (Note* note : notes) {
+                                    std::cout << "Note: " << note->pitch() << ", Staff: "<< staff_idx << ", Tick: " << segment.tick().numerator() << "/" <<  segment.tick().denominator() <<  std::endl;
+                                    QJsonObject jsonMeasure;
+                                    jsonMeasure.insert("pitch", note->pitch());
+                                    jsonMeasure.insert("staff", static_cast<int>(staff_idx));
+                                    jsonMeasure.insert("tickNum", segment.tick().numerator());
+                                    jsonMeasure.insert("tickDen",  segment.tick().denominator());
+                                    jsonMeasure.insert("track",  track);
+                                    jsonNotesArray.append(jsonMeasure);
+                                }
+                            }
+                        }
+                        
+                    }
+                }
+            }
+        }
+    }
+    return jsonNotesArray;
 }
 
 QJsonArray NotationMeta::measuresJsonArray(const mu::engraving::Score* score)
