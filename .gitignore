@@ -67,3 +67,6 @@ VERSION
 *.orig
 
 temp_*
+
+#python
+*/venv
