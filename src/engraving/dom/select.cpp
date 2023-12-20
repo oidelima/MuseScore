@@ -63,6 +63,8 @@
 #include "stringtunings.h"
 #include "tie.h"
 #include "tremolo.h"
+#include "tremolotwochord.h"
+#include "tremolosinglechord.h"
 #include "tuplet.h"
 
 #include "log.h"
@@ -161,7 +163,13 @@ bool SelectionFilter::canSelect(const EngravingItem* e) const
     if (e->isSLine()) { // NoteLine, Volta
         return isFiltered(SelectionFilterType::OTHER_LINE);
     }
-    if (e->isTremolo()) {
+    if (e->type() == ElementType::TREMOLO) {
+        return isFiltered(SelectionFilterType::TREMOLO);
+    }
+    if (e->type() == ElementType::TREMOLO_TWOCHORD) {
+        return isFiltered(SelectionFilterType::TREMOLO);
+    }
+    if (e->type() == ElementType::TREMOLO_SINGLECHORD) {
         return isFiltered(SelectionFilterType::TREMOLO);
     }
     if (e->isChord() && toChord(e)->isGrace()) {
@@ -493,8 +501,11 @@ void Selection::appendChord(Chord* chord)
     if (chord->stemSlash()) {
         m_el.push_back(chord->stemSlash());
     }
-    if (chord->tremoloDispatcher()) {
-        appendFiltered(chord->tremoloDispatcher());
+    if (chord->tremoloTwoChord()) {
+        appendFiltered(chord->tremoloTwoChord());
+    }
+    if (chord->tremoloSingleChord()) {
+        appendFiltered(chord->tremoloSingleChord());
     }
     for (Note* note : chord->notes()) {
         m_el.push_back(note);
@@ -1214,8 +1225,8 @@ static bool checkStart(EngravingItem* e)
     } else if (cr->type() == ElementType::CHORD) {
         rv = false;
         Chord* chord = toChord(cr);
-        if (chord->tremoloDispatcher() && chord->tremoloDispatcher()->twoNotes()) {
-            rv = chord->tremoloDispatcher()->chord2() == chord;
+        if (chord->tremoloTwoChord()) {
+            rv = chord->tremoloTwoChord()->chord2() == chord;
         }
     }
     return rv;
@@ -1252,8 +1263,8 @@ static bool checkEnd(EngravingItem* e, const Fraction& endTick)
     } else if (cr->type() == ElementType::CHORD) {
         rv = false;
         Chord* chord = toChord(cr);
-        if (chord->tremoloDispatcher() && chord->tremoloDispatcher()->twoNotes()) {
-            rv = chord->tremoloDispatcher()->chord1() == chord;
+        if (chord->tremoloTwoChord()) {
+            rv = chord->tremoloTwoChord()->chord1() == chord;
         }
     }
     return rv;

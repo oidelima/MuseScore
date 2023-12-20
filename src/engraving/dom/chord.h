@@ -165,11 +165,13 @@ public:
     void setSpanArpeggio(Arpeggio* a) { m_spanArpeggio = a; }
     void undoChangeSpanArpeggio(Arpeggio* a);
 
-    TremoloDispatcher* tremoloDispatcher() const { return m_tremoloDispatcher; }
+    TremoloDispatcher* tremoloDispatcher() const;
     TremoloType tremoloType() const;
     TremoloTwoChord* tremoloTwoChord() const;
     TremoloSingleChord* tremoloSingleChord() const;
-    void setTremoloDispatcher(TremoloDispatcher* t, bool applyLogic = true);
+
+    void setTremoloTwoChord(TremoloTwoChord* tr, bool applyLogic = true);
+    void setTremoloSingleChord(TremoloSingleChord* tr);
 
     ChordLine* chordLine() const;
     bool endsGlissandoOrGuitarBend() const { return m_endsGlissando; }
@@ -307,9 +309,6 @@ public:
     double downPos() const override;
     double centerX() const;
 
-    // `includeTemporarySiblings`: whether items that are deleted & recreated during every layout should also be processed
-    void processSiblings(std::function<void(EngravingItem*)> func, bool includeTemporarySiblings) const;
-
     double calcDefaultStemLength();
 
     struct StartEndSlurs {
@@ -341,6 +340,9 @@ private:
     int calcMinStemLength();
     int calc4BeamsException(int stemLength) const;
 
+    // `includeTemporarySiblings`: whether items that are deleted & recreated during every layout should also be processed
+    void processSiblings(std::function<void(EngravingItem*)> func, bool includeTemporarySiblings) const;
+
     std::vector<Note*> m_notes;           // sorted to decreasing line step
     LedgerLine* m_ledgerLines = nullptr;  // single linked list
 
@@ -350,7 +352,10 @@ private:
 
     Arpeggio* m_arpeggio = nullptr;       // arpeggio which starts on the chord
     Arpeggio* m_spanArpeggio = nullptr;   // arpeggio which spans over this chord
-    TremoloDispatcher* m_tremoloDispatcher = nullptr;
+
+    TremoloTwoChord* m_tremoloTwoChord = nullptr;
+    TremoloSingleChord* m_tremoloSingleChord = nullptr;
+
     bool m_endsGlissando = false;        // true if this chord is the ending point of a glissando (needed for layout)
     std::vector<Chord*> m_graceNotes;    // storage for all grace notes
     mutable GraceNotesGroup m_graceNotesBefore = GraceNotesGroup(this); // will store before-chord grace notes
