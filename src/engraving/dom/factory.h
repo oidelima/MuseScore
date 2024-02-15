@@ -36,6 +36,8 @@ class RootItem;
 class TremoloTwoChord;
 class TremoloSingleChord;
 
+class SoundFlag;
+
 class Factory
 {
 public:
@@ -161,6 +163,8 @@ public:
 
     static StaffText* createStaffText(Segment* parent, TextStyleType textStyleType = TextStyleType::STAFF, bool isAccessibleEnabled = true);
 
+    static SoundFlag* createSoundFlag(EngravingItem* parent, bool isAccessibleEnabled = true);
+
     static Expression* createExpression(Segment* parent, bool isAccessibleEnabled = true);
 
     static RehearsalMark* createRehearsalMark(Segment* parent, bool isAccessibleEnabled = true);
@@ -197,14 +201,12 @@ public:
     static TimeSig* copyTimeSig(const TimeSig& src);
     static std::shared_ptr<TimeSig> makeTimeSig(Segment* parent);
 
-    static TremoloDispatcher* createTremoloDispatcher(Chord* parent, bool isAccessibleEnabled = true);
-    static TremoloDispatcher* copyTremoloDispatcher(const TremoloDispatcher& src);
-    static std::shared_ptr<TremoloDispatcher> makeTremoloDispatcher(Chord* parent);
-
     static TremoloTwoChord* createTremoloTwoChord(Chord* parent, bool isAccessibleEnabled = true);
+    static std::shared_ptr<TremoloTwoChord> makeTremoloTwoChord(Chord* parent);
     static TremoloTwoChord* copyTremoloTwoChord(const TremoloTwoChord& src);
 
     static TremoloSingleChord* createTremoloSingleChord(Chord* parent, bool isAccessibleEnabled = true);
+    static std::shared_ptr<TremoloSingleChord> makeTremoloSingleChord(Chord* parent);
     static TremoloSingleChord* copyTremoloSingleChord(const TremoloSingleChord& src);
 
     static TremoloBar* createTremoloBar(EngravingItem* parent, bool isAccessibleEnabled = true);

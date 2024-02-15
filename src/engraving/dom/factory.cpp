@@ -97,12 +97,13 @@
 #include "system.h"
 #include "systemdivider.h"
 #include "systemtext.h"
+#include "soundflag.h"
 #include "tempotext.h"
 #include "text.h"
 #include "textline.h"
 #include "tie.h"
 #include "timesig.h"
-#include "tremolo.h"
+
 #include "tremolotwochord.h"
 #include "tremolosinglechord.h"
 #include "tremolobar.h"
@@ -174,6 +175,7 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
     case ElementType::SYSTEM_TEXT:       return new SystemText(parent->isSegment() ? toSegment(parent) : dummy->segment());
     case ElementType::REHEARSAL_MARK:    return new RehearsalMark(parent->isSegment() ? toSegment(parent) : dummy->segment());
     case ElementType::INSTRUMENT_CHANGE: return new InstrumentChange(parent);
+    case ElementType::SOUND_FLAG:        return new SoundFlag(parent);
     case ElementType::STAFFTYPE_CHANGE:  return new StaffTypeChange(parent->isMeasureBase() ? toMeasureBase(parent) : dummy->measure());
     case ElementType::NOTEHEAD:          return new NoteHead(parent->isNote() ? toNote(parent) : dummy->note());
     case ElementType::NOTEDOT: {
@@ -185,7 +187,6 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
             return new NoteDot(dummy->note());
         }
     }
-    case ElementType::TREMOLO:           return new TremoloDispatcher(parent->isChord() ? toChord(parent) : dummy->chord());
     case ElementType::TREMOLO_SINGLECHORD: return new TremoloSingleChord(parent->isChord() ? toChord(parent) : dummy->chord());
     case ElementType::TREMOLO_TWOCHORD:  return new TremoloTwoChord(parent->isChord() ? toChord(parent) : dummy->chord());
     case ElementType::LAYOUT_BREAK:      return new LayoutBreak(parent->isMeasureBase() ? toMeasureBase(parent) : dummy->measure());
@@ -282,6 +283,7 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
     case ElementType::GRACE_NOTES_GROUP:
     case ElementType::ROOT_ITEM:
     case ElementType::FIGURED_BASS_ITEM:
+    case ElementType::TREMOLO:
     case ElementType::DUMMY:
         break;
     }
@@ -532,7 +534,9 @@ StaffText* Factory::createStaffText(Segment * parent, TextStyleType textStyleTyp
     return staffText;
 }
 
-Expression* Factory::createExpression(Segment* parent, bool isAccessibleEnabled)
+CREATE_ITEM_IMPL(SoundFlag, ElementType::SOUND_FLAG, EngravingItem, isAccessibleEnabled)
+
+Expression* Factory::createExpression(Segment * parent, bool isAccessibleEnabled)
 {
     Expression* expression = new Expression(parent);
     expression->setAccessibleEnabled(isAccessibleEnabled);
@@ -615,15 +619,13 @@ CREATE_ITEM_IMPL(TimeSig, ElementType::TIMESIG, Segment, isAccessibleEnabled)
 COPY_ITEM_IMPL(TimeSig)
 MAKE_ITEM_IMPL(TimeSig, Segment)
 
-CREATE_ITEM_IMPL(TremoloDispatcher, ElementType::TREMOLO, Chord, isAccessibleEnabled)
-COPY_ITEM_IMPL(TremoloDispatcher)
-MAKE_ITEM_IMPL(TremoloDispatcher, Chord)
-
 CREATE_ITEM_IMPL(TremoloTwoChord, ElementType::TREMOLO_TWOCHORD, Chord, isAccessibleEnabled)
 COPY_ITEM_IMPL(TremoloTwoChord)
+MAKE_ITEM_IMPL(TremoloTwoChord, Chord)
 
 CREATE_ITEM_IMPL(TremoloSingleChord, ElementType::TREMOLO_SINGLECHORD, Chord, isAccessibleEnabled)
 COPY_ITEM_IMPL(TremoloSingleChord)
+MAKE_ITEM_IMPL(TremoloSingleChord, Chord)
 
 CREATE_ITEM_IMPL(TremoloBar, ElementType::TREMOLOBAR, EngravingItem, isAccessibleEnabled)
 MAKE_ITEM_IMPL(TremoloBar, EngravingItem)

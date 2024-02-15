@@ -135,9 +135,9 @@ enum class AccidentalType {
     SHARP_31 = int(mu::engraving::AccidentalType::SHARP_31),
     FLAT_53 = int(mu::engraving::AccidentalType::FLAT_53),
     SHARP_53 = int(mu::engraving::AccidentalType::SHARP_53),
-    //EQUALS_ALMOST = int(mu::engraving::AccidentalType::EQUALS_ALMOST),
-    //EQUALS = int(mu::engraving::AccidentalType::EQUALS),
-    //TILDE = int(mu::engraving::AccidentalType::TILDE),
+    EQUALS_ALMOST = int(mu::engraving::AccidentalType::EQUALS_ALMOST),
+    EQUALS = int(mu::engraving::AccidentalType::EQUALS),
+    TILDE = int(mu::engraving::AccidentalType::TILDE),
 
     // Persian
     SORI = int(mu::engraving::AccidentalType::SORI),
@@ -289,7 +289,9 @@ enum class ElementType {
     STAFF_STATE           = int(mu::engraving::ElementType::STAFF_STATE),
     NOTEHEAD              = int(mu::engraving::ElementType::NOTEHEAD),
     NOTEDOT               = int(mu::engraving::ElementType::NOTEDOT),
-    TREMOLO               = int(mu::engraving::ElementType::TREMOLO),
+    TREMOLO               = int(mu::engraving::ElementType::TREMOLO), // deprecated
+    TREMOLO_SINGLECHORD   = int(mu::engraving::ElementType::TREMOLO_SINGLECHORD),
+    TREMOLO_TWOCHORD      = int(mu::engraving::ElementType::TREMOLO_TWOCHORD),
     IMAGE                 = int(mu::engraving::ElementType::IMAGE),
     MEASURE               = int(mu::engraving::ElementType::MEASURE),
     SELECTION             = int(mu::engraving::ElementType::SELECTION),

@@ -80,7 +80,7 @@
 #include "tie.h"
 #include "tiemap.h"
 #include "timesig.h"
-#include "tremolo.h"
+
 #include "tremolotwochord.h"
 #include "tremolosinglechord.h"
 #include "trill.h"
@@ -2236,13 +2236,6 @@ void Score::cmdFlip()
                 DirectionV dir = beam->up() ? DirectionV::DOWN : DirectionV::UP;
                 beam->undoChangeProperty(Pid::STEM_DIRECTION, dir);
             });
-        } else if (e->isTremolo()) {
-            UNREACHABLE;
-            TremoloDispatcher* tremolo = item_cast<TremoloDispatcher*>(e);
-            flipOnce(tremolo, [tremolo]() {
-                DirectionV dir = tremolo->up() ? DirectionV::DOWN : DirectionV::UP;
-                tremolo->undoChangeProperty(Pid::STEM_DIRECTION, dir);
-            });
         } else if (e->isType(ElementType::TREMOLO_TWOCHORD)) {
             TremoloTwoChord* tremolo = item_cast<TremoloTwoChord*>(e);
             flipOnce(tremolo, [tremolo]() {
@@ -2434,8 +2427,9 @@ void Score::deleteItem(EngravingItem* el)
                 return;
             }
         }
-        bool ic = k->segment()->next(SegmentType::ChordRest)->findAnnotation(ElementType::INSTRUMENT_CHANGE,
-                                                                             el->part()->startTrack(), el->part()->endTrack() - 1);
+        Segment* nextCrSeg = k->segment()->next1(SegmentType::ChordRest);
+        bool ic = nextCrSeg && nextCrSeg->findAnnotation(ElementType::INSTRUMENT_CHANGE,
+                                                         el->part()->startTrack(), el->part()->endTrack() - 1);
         undoRemoveElement(k);
         if (ic) {
             KeySigEvent ke = k->keySigEvent();
@@ -3992,7 +3986,6 @@ void Score::nextInputPos(ChordRest* cr, bool doSelect)
         if (doSelect) {
             select(ncr, SelectType::SINGLE, 0);
         }
-        setPlayPos(ncr->tick());
         for (MuseScoreView* v : m_viewer) {
             v->moveCursor();
         }
@@ -4905,6 +4898,8 @@ void Score::undoChangeElement(EngravingItem* oldElement, EngravingItem* newEleme
 {
     if (!oldElement) {
         undoAddElement(newElement);
+    } else if (oldElement->isSpanner()) {
+        undo(new ChangeElement(oldElement, newElement));
     } else {
         const std::list<EngravingObject*> links = oldElement->linkList();
         for (EngravingObject* obj : links) {
@@ -5128,6 +5123,12 @@ void Score::undoChangeClef(Staff* ostaff, EngravingItem* e, ClefType ct, bool fo
         staff_idx_t staffIdx = staff->idx();
         track_idx_t track    = staffIdx * VOICES;
         Clef* clef   = toClef(destSeg->element(track));
+
+        StaffType* staffType = staff->staffType(e->tick());
+        StaffGroup staffGroup = staffType->group();
+        if (ClefInfo::staffGroup(ct) != staffGroup) {
+            continue;
+        }
 
         if (clef) {
             //
@@ -5856,7 +5857,8 @@ void Score::undoAddElement(EngravingItem* element, bool addToLinkedStaves, bool 
             && et != ElementType::CAPO
             && et != ElementType::STRING_TUNINGS
             && et != ElementType::STICKING
-            && et != ElementType::TREMOLO
+            && et != ElementType::TREMOLO_SINGLECHORD
+            && et != ElementType::TREMOLO_TWOCHORD
             && et != ElementType::ARPEGGIO
             && et != ElementType::SYMBOL
             && et != ElementType::IMAGE
@@ -6167,34 +6169,17 @@ void Score::undoAddElement(EngravingItem* element, bool addToLinkedStaves, bool 
                         }
                     }
                 }
+
+                if (sp->isTextLine() && sp != nsp) {
+                    EngravingItem* parent = sp->parentItem();
+                    if (parent && parent->isNote()) {
+                        nsp->setParent(parent->findLinkedInStaff(staff));
+                    }
+                }
+
                 doUndoAddElement(nsp);
             } else if (et == ElementType::GLISSANDO || et == ElementType::GUITAR_BEND) {
                 doUndoAddElement(toSpanner(ne));
-            } else if (element->isTremolo() && item_cast<TremoloDispatcher*>(element)->twoNotes()) {
-                UNREACHABLE;
-                TremoloDispatcher* tremolo = item_cast<TremoloDispatcher*>(element);
-                ChordRest* cr1 = toChordRest(tremolo->chord1());
-                ChordRest* cr2 = toChordRest(tremolo->chord2());
-                Segment* s1    = cr1->segment();
-                Segment* s2    = cr2->segment();
-                Measure* m1    = s1->measure();
-                Measure* m2    = s2->measure();
-                Measure* nm1   = score->tick2measure(m1->tick());
-                Measure* nm2   = score->tick2measure(m2->tick());
-                Segment* ns1   = nm1->findSegment(s1->segmentType(), s1->tick());
-                Segment* ns2   = nm2->findSegment(s2->segmentType(), s2->tick());
-                Chord* c1      = toChord(ns1->element(staffIdx * VOICES + cr1->voice()));
-                Chord* c2      = toChord(ns2->element(staffIdx * VOICES + cr2->voice()));
-                TremoloDispatcher* ntremolo = item_cast<TremoloDispatcher*>(ne);
-                ntremolo->setChords(c1, c2);
-                ntremolo->setParent(c1);
-                doUndoAddElement(ntremolo);
-            } else if (element->isTremolo() && !item_cast<TremoloDispatcher*>(element)->twoNotes()) {
-                UNREACHABLE;
-                Chord* cr = toChord(element->explicitParent());
-                Chord* c1 = findLinkedChord(cr, score->staff(staffIdx));
-                ne->setParent(c1);
-                doUndoAddElement(ne);
             } else if (element->isType(ElementType::TREMOLO_TWOCHORD)) {
                 TremoloTwoChord* tremolo = item_cast<TremoloTwoChord*>(element);
                 ChordRest* cr1 = toChordRest(tremolo->chord1());
@@ -6209,7 +6194,7 @@ void Score::undoAddElement(EngravingItem* element, bool addToLinkedStaves, bool 
                 Segment* ns2   = nm2->findSegment(s2->segmentType(), s2->tick());
                 Chord* c1      = toChord(ns1->element(staffIdx * VOICES + cr1->voice()));
                 Chord* c2      = toChord(ns2->element(staffIdx * VOICES + cr2->voice()));
-                TremoloDispatcher* ntremolo = item_cast<TremoloDispatcher*>(ne);
+                TremoloTwoChord* ntremolo = item_cast<TremoloTwoChord*>(ne);
                 ntremolo->setChords(c1, c2);
                 ntremolo->setParent(c1);
                 doUndoAddElement(ntremolo);
@@ -6754,14 +6739,13 @@ void Score::undoInsertTime(const Fraction& tick, const Fraction& len)
 //   undoRemoveMeasures
 //---------------------------------------------------------
 
-void Score::undoRemoveMeasures(Measure* m1, Measure* m2, bool preserveTies)
+void Score::undoRemoveMeasures(Measure* m1, Measure* m2, bool preserveTies, bool moveStaffTypeChanges)
 {
     assert(m1 && m2);
 
     const Fraction startTick = m1->tick();
     const Fraction endTick = m2->endTick();
     std::set<Spanner*> spannersToRemove;
-    std::set<EngravingItem*> annotationsToRemove;
 
     //
     //  handle ties which start before m1 and end in (m1-m2)
@@ -6779,8 +6763,14 @@ void Score::undoRemoveMeasures(Measure* m1, Measure* m2, bool preserveTies)
             continue;
         }
 
-        for (EngravingItem* ee : s->annotations()) {
-            annotationsToRemove.insert(ee);
+        // Make sure annotations are removed once, even if this segment contains linked copies of the same annotation
+        // (the linked copy would be removed by undoRemoveElement)
+        while (!s->annotations().empty()) {
+            EngravingItem* annotation = s->annotations().front();
+            IF_ASSERT_FAILED(annotation) {
+                continue;
+            }
+            undoRemoveElement(annotation);
         }
 
         for (track_idx_t track = 0; track < ntracks(); ++track) {
@@ -6824,11 +6814,17 @@ void Score::undoRemoveMeasures(Measure* m1, Measure* m2, bool preserveTies)
         undoRemoveElement(s);
     }
 
-    for (EngravingItem* a : annotationsToRemove) {
-        undoRemoveElement(a);
+    // delete staffTypeChanges in removed measures
+    for (Measure* m = m1; m && m != m2->nextMeasure(); m = m->nextMeasure()) {
+        for (size_t i = m->el().size(); i > 0; --i) {
+            EngravingItem* el = m->el().at(i - 1);
+            if (el && el->isStaffTypeChange()) {
+                deleteItem(el);
+            }
+        }
     }
 
-    undo(new RemoveMeasures(m1, m2));
+    undo(new RemoveMeasures(m1, m2, moveStaffTypeChanges));
 }
 
 //---------------------------------------------------------

@@ -149,6 +149,7 @@ class StringTunings;
 class System;
 class SystemDivider;
 class Symbol;
+class SoundFlag;
 class BSymbol;
 class FSymbol;
 
@@ -159,7 +160,6 @@ class Tie;
 class TimeSig;
 class TimeSigMap;
 class SigEvent;
-class TremoloDispatcher;
 class TremoloSingleChord;
 class TremoloTwoChord;
 class TremoloBar;
@@ -167,6 +167,10 @@ class Trill;
 class Tuplet;
 class Vibrato;
 class Volta;
+}
+
+namespace mu::engraving::compat {
+struct TremoloCompat;
 }
 
 namespace mu::engraving::read410 {
@@ -292,6 +296,7 @@ public:
     static void read(System* s, XmlReader& xml, ReadContext& ctx);
     static void read(SystemDivider* d, XmlReader& xml, ReadContext& ctx);
     static void read(Symbol* sym, XmlReader& xml, ReadContext& ctx);
+    static void read(SoundFlag* sym, XmlReader& xml, ReadContext& ctx);
     static void read(FSymbol* sym, XmlReader& xml, ReadContext& ctx);
 
     static void read(Text* t, XmlReader& xml, ReadContext& ctx);
@@ -300,7 +305,8 @@ public:
     static void read(Tie* t, XmlReader& xml, ReadContext& ctx);
     static void read(TimeSig* s, XmlReader& xml, ReadContext& ctx);
     static void read(TimeSigMap* item, XmlReader& xml, ReadContext& ctx);
-    static void read(TremoloDispatcher* t, XmlReader& xml, ReadContext& ctx);
+    static void read(TremoloTwoChord* t, XmlReader& xml, ReadContext& ctx);
+    static void read(TremoloSingleChord* t, XmlReader& xml, ReadContext& ctx);
 
     static void read(TremoloBar* b, XmlReader& xml, ReadContext& ctx);
     static void read(Trill* t, XmlReader& xml, ReadContext& ctx);
@@ -309,12 +315,7 @@ public:
     static void read(Volta* v, XmlReader& xml, ReadContext& ctx);
 
     // compat
-    struct TremoloCompat {
-        Chord* parent = nullptr;
-        TremoloSingleChord* single = nullptr;
-        TremoloTwoChord* two = nullptr;
-    };
-    static void read(TremoloCompat& t, XmlReader& xml, ReadContext& ctx);
+    static void read(compat::TremoloCompat* tc, XmlReader& xml, ReadContext& ctx);
 
     // temp compat
 

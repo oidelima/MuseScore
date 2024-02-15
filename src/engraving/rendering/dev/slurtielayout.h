@@ -51,7 +51,7 @@ public:
     static SpannerSegment* layoutSystem(Slur* item, System* system, LayoutContext& ctx);
 
     static TieSegment* tieLayoutFor(Tie* item, System* system);
-    static TieSegment* tieLayoutBack(Tie* item, System* system);
+    static TieSegment* tieLayoutBack(Tie* item, System* system, LayoutContext& ctx);
     static void resolveVerticalTieCollisions(const std::vector<TieSegment*>& stackedTies);
 
     static void computeUp(Slur* slur, LayoutContext& ctx);
@@ -91,6 +91,8 @@ private:
     static void layoutSegment(SlurSegment* item, LayoutContext& ctx, const PointF& p1, const PointF& p2);
 
     static void computeMidThickness(SlurTieSegment* slurTieSeg, double slurTieLengthInSp);
+    static void fillShape(SlurTieSegment* slurTieSeg, double slurTieLengthInSp);
+    static bool shouldHideSlurSegment(SlurSegment* item, LayoutContext& ctx);
 };
 }
 

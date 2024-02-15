@@ -48,7 +48,7 @@
 #include "engraving/dom/text.h"
 #include "engraving/dom/tie.h"
 #include "engraving/dom/timesig.h"
-#include "engraving/dom/tremolo.h"
+#include "engraving/dom/tremolosinglechord.h"
 #include "engraving/dom/trill.h"
 #include "engraving/dom/tripletfeel.h"
 #include "engraving/dom/tuplet.h"
@@ -406,12 +406,20 @@ void GPConverter::fixEmptyMeasures()
                 continue;
             }
             for (size_t i = 1; i < segItemPairs.size(); ++i) {
-                segItemPairs.at(i).first->remove(segItemPairs.at(i).second);
+                Rest* rest = toRest(segItemPairs.at(i).second);
+                if (Tuplet* tuplet = rest->tuplet()) {
+                    tuplet->remove(rest);
+                }
+
+                segItemPairs.at(i).first->remove(rest);
             }
 
             Rest* rest = toRest(segItemPairs.at(0).second);
             rest->setTicks(lastMeasure->ticks());
             rest->setDurationType(DurationType::V_MEASURE);
+            if (Tuplet* tuplet = rest->tuplet()) {
+                tuplet->remove(rest);
+            }
         }
     }
 }
@@ -1334,6 +1342,12 @@ void GPConverter::addContinuousSlideHammerOn()
         if (slide.second == SlideHammerOn::LegatoSlide || slide.second == SlideHammerOn::HammerOn) {
             if (legatoSlides.count(startNote) == 0) {
                 Slur* slur = mu::engraving::Factory::createSlur(_score->dummy());
+                if (slide.second == SlideHammerOn::LegatoSlide) {
+                    slur->setConnectedElement(mu::engraving::Slur::ConnectedElement::GLISSANDO);
+                } else if (slide.second == SlideHammerOn::HammerOn) {
+                    slur->setConnectedElement(mu::engraving::Slur::ConnectedElement::HAMMER_ON);
+                }
+
                 slur->setStartElement(startNote->chord());
                 slur->setTrack(track);
                 slur->setTick(startTick);
@@ -1402,6 +1416,25 @@ void GPConverter::addFermatas()
     }
 }
 
+static Segment* findClosestSegment(Measure* m, Fraction tick)
+{
+    Segment* segment = m->findSegment(SegmentType::ChordRest, tick);
+    if (!segment) {
+        segment = m->getSegment(SegmentType::ChordRest, tick);
+        Segment* prev = segment->prev1(SegmentType::ChordRest);
+        Segment* next = segment->next1(SegmentType::ChordRest);
+        if (prev && next) {
+            segment = (next->tick() - segment->tick() < segment->tick() - prev->tick() ? next : prev);
+        } else if (prev) {
+            segment = prev;
+        } else if (next) {
+            segment = next;
+        }
+    }
+
+    return segment;
+}
+
 void GPConverter::addTempoMap()
 {
     auto realTempo = [](const GPMasterTracks::Automation& temp) {
@@ -1434,7 +1467,7 @@ void GPConverter::addTempoMap()
         for (auto tempIt = range.first; tempIt != range.second; tempIt++) {
             Fraction tick = m->tick() + Fraction::fromTicks(
                 tempIt->second.position * Constants::DIVISION * 4 * m->ticks().numerator() / m->ticks().denominator());
-            Segment* segment = m->getSegment(SegmentType::ChordRest, tick);
+            Segment* segment = findClosestSegment(m, tick);
             int realTemp = realTempo(tempIt->second);
             TempoText* tt = Factory::createTempoText(segment);
             tt->setTempo((double)realTemp / 60);
@@ -2220,8 +2253,9 @@ void GPConverter::addTie(const GPNote* gpnote, Note* note, TieMap& ties)
                 Chord* startChord = toChord(startNote->parent());
                 Chord* endChord = toChord(endNote->parent());
                 if (m_tremolosInChords.find(startChord) != m_tremolosInChords.end()) {
-                    TremoloDispatcher* t = Factory::createTremoloDispatcher(_score->dummy()->chord());
                     TremoloType type = m_tremolosInChords.at(startChord);
+                    DO_ASSERT(!isTremoloTwoChord(type));
+                    TremoloSingleChord* t = Factory::createTremoloSingleChord(_score->dummy()->chord());
                     t->setTremoloType(type);
                     endChord->add(t);
                     mu::remove(m_tremolosInChords, startChord);
@@ -2712,7 +2746,7 @@ void GPConverter::addTremolo(const GPBeat* beat, ChordRest* cr)
         }
     };
 
-    TremoloDispatcher* t = Factory::createTremoloDispatcher(_score->dummy()->chord());
+    TremoloSingleChord* t = Factory::createTremoloSingleChord(_score->dummy()->chord());
     t->setTremoloType(scoreTremolo(beat->tremolo()));
     Chord* ch = toChord(cr);
     ch->add(t);

@@ -118,7 +118,11 @@ static bool defaultPageSizeIsLetter()
     }
 #ifndef NO_QT_SUPPORT
     // try locale
+#ifdef MU_QT5_COMPAT
     switch (QLocale::system().country()) {
+#else
+    switch (QLocale::system().territory()) {
+#endif
     case QLocale::UnitedStates:
     case QLocale::Canada:
     case QLocale::Mexico:
@@ -321,6 +325,11 @@ bool EngravingConfiguration::guitarProMultivoiceEnabled() const
 }
 
 bool EngravingConfiguration::minDistanceForPartialSkylineCalculated() const
+{
+    return guitarProImportExperimental();
+}
+
+bool EngravingConfiguration::specificSlursLayoutWorkaround() const
 {
     return guitarProImportExperimental();
 }

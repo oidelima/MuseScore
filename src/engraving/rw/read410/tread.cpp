@@ -35,6 +35,7 @@
 #include "../../dom/tempotext.h"
 #include "../../dom/stafftext.h"
 #include "../../dom/stafftextbase.h"
+#include "../../dom/soundflag.h"
 #include "../../dom/capo.h"
 
 #include "../../dom/drumset.h"
@@ -100,7 +101,6 @@
 #include "../../dom/stemslash.h"
 #include "../../dom/hook.h"
 #include "../../dom/page.h"
-#include "../../dom/tremolo.h"
 #include "../../dom/clef.h"
 #include "../../dom/glissando.h"
 #include "../../dom/gradualtempochange.h"
@@ -140,6 +140,7 @@
 #include "../xmlreader.h"
 #include "../read206/read206.h"
 #include "../compat/compatutils.h"
+#include "../compat/tremolocompat.h"
 #include "readcontext.h"
 #include "connectorinforeader.h"
 
@@ -147,42 +148,6 @@
 
 using namespace mu::engraving;
 using namespace mu::engraving::read410;
-
-using ReadTypes = rtti::TypeList<Accidental, ActionIcon, Ambitus, Arpeggio, Articulation,
-                                 BagpipeEmbellishment, BarLine, Beam, Bend, StretchedBend,  HBox, VBox, FBox, TBox, Bracket, Breath,
-                                 Chord, ChordLine, Clef, Capo,
-                                 Dynamic, Expression,
-                                 Fermata, FiguredBass, Fingering, FretDiagram,
-                                 Glissando, GradualTempoChange, GuitarBend,
-                                 Hairpin, Harmony, HarmonicMark, HarpPedalDiagram, Hook,
-                                 Image, InstrumentChange,
-                                 Jump,
-                                 KeySig,
-                                 LayoutBreak, LedgerLine, LetRing, Lyrics,
-                                 Marker, MeasureNumber, MeasureRepeat, MMRest, MMRestRange,
-                                 Note, NoteDot, NoteHead, NoteLine,
-                                 Page, PalmMute, Pedal, PlayTechAnnotation,
-                                 Rasgueado, RehearsalMark, Rest,
-                                 Ornament, Ottava,
-                                 Segment, Slur, Spacer, StaffState, StaffText, StaffTypeChange, Stem, StemSlash, Sticking, StringTunings,
-                                 Symbol, FSymbol, System, SystemDivider, SystemText,
-                                 TempoText, Text, TextLine, Tie, TimeSig, TremoloDispatcher, TremoloBar, Trill, Tuplet,
-                                 Vibrato, Volta,
-                                 WhammyBar>;
-
-class ReadVisitor : public rtti::Visitor<ReadVisitor>
-{
-public:
-    template<typename T>
-    static bool doVisit(EngravingItem* item, XmlReader& xml, ReadContext& ctx)
-    {
-        if (T::classof(item)) {
-            TRead::read(static_cast<T*>(item), xml, ctx);
-            return true;
-        }
-        return false;
-    }
-};
 
 void TRead::readItem(EngravingItem* item, XmlReader& xml, ReadContext& ctx)
 {
@@ -329,6 +294,8 @@ void TRead::readItem(EngravingItem* item, XmlReader& xml, ReadContext& ctx)
         break;
     case ElementType::SYMBOL: read(item_cast<Symbol*>(item), xml, ctx);
         break;
+    case ElementType::SOUND_FLAG: read(item_cast<SoundFlag*>(item), xml, ctx);
+        break;
     case ElementType::FSYMBOL: read(item_cast<FSymbol*>(item), xml, ctx);
         break;
     case ElementType::SYSTEM: read(item_cast<System*>(item), xml, ctx);
@@ -347,7 +314,9 @@ void TRead::readItem(EngravingItem* item, XmlReader& xml, ReadContext& ctx)
         break;
     case ElementType::TIMESIG: read(item_cast<TimeSig*>(item), xml, ctx);
         break;
-    case ElementType::TREMOLO: read(item_cast<TremoloDispatcher*>(item), xml, ctx);
+    case ElementType::TREMOLO_SINGLECHORD: read(item_cast<TremoloSingleChord*>(item), xml, ctx);
+        break;
+    case ElementType::TREMOLO_TWOCHORD: read(item_cast<TremoloTwoChord*>(item), xml, ctx);
         break;
     case ElementType::TREMOLOBAR: read(item_cast<TremoloBar*>(item), xml, ctx);
         break;
@@ -694,7 +663,16 @@ void TRead::read(TempoText* t, XmlReader& e, ReadContext& ctx)
 
 void TRead::read(StaffText* t, XmlReader& xml, ReadContext& ctx)
 {
-    read(static_cast<StaffTextBase*>(t), xml, ctx);
+    while (xml.readNextStartElement()) {
+        const AsciiStringView tag(xml.name());
+        if (tag == "SoundFlag") {
+            SoundFlag* flag = Factory::createSoundFlag(t);
+            read(flag, xml, ctx);
+            t->setSoundFlag(flag);
+        } else if (!readProperties(static_cast<StaffTextBase*>(t), xml, ctx)) {
+            xml.unknown();
+        }
+    }
 }
 
 void TRead::read(StaffTextBase* t, XmlReader& xml, ReadContext& ctx)
@@ -1998,6 +1976,7 @@ bool TRead::readProperties(Ornament* o, XmlReader& xml, ReadContext& ctx)
     } else if (tag == "Accidental") {
         Accidental* accidental = Factory::createAccidental(o);
         TRead::read(accidental, xml, ctx);
+        accidental->setTrack(ctx.track());
         accidental->setParent(o);
         accidental->placement() == PlacementV::ABOVE ? o->setAccidentalAbove(accidental) : o->setAccidentalBelow(accidental);
     } else if (tag == "Chord") {
@@ -2511,6 +2490,28 @@ void TRead::read(Symbol* sym, XmlReader& e, ReadContext& ctx)
     sym->setSym(symId, scoreFont);
 }
 
+void TRead::read(SoundFlag* item, XmlReader& xml, ReadContext&)
+{
+    while (xml.readNextStartElement()) {
+        const AsciiStringView tag(xml.name());
+
+        if (tag == "presets") {
+            item->setSoundPresets(xml.readText().split(u","));
+        } else if (tag == "Params") {
+            SoundFlag::Params params;
+
+            while (xml.readNextStartElement()) {
+                String paramKey = String::fromStdString(std::string(xml.name()));
+                params.insert_or_assign(std::move(paramKey), Val(xml.readText().toStdString()));
+            }
+
+            item->setParams(params);
+        } else {
+            xml.unknown();
+        }
+    }
+}
+
 void TRead::read(FSymbol* sym, XmlReader& e, ReadContext& ctx)
 {
     mu::draw::Font font = sym->font();
@@ -2602,16 +2603,18 @@ bool TRead::readProperties(Chord* ch, XmlReader& e, ReadContext& ctx)
     } else if (TRead::readProperty(ch, tag, e, ctx, Pid::STEM_DIRECTION)) {
     } else if (tag == "noStem") {
         ch->setNoStem(e.readInt());
+    } else if (tag == "showStemSlash") {
+        ch->setShowStemSlash(e.readBool());
     } else if (tag == "Arpeggio") {
         Arpeggio* arpeggio = Factory::createArpeggio(ch);
         arpeggio->setTrack(ch->track());
         TRead::read(arpeggio, e, ctx);
         arpeggio->setParent(ch);
         ch->setArpeggio(arpeggio);
-    } else if (tag == "Tremolo") {
-        TremoloCompat tcompat;
+    } else if (tag == "Tremolo") { // compat
+        compat::TremoloCompat tcompat;
         tcompat.parent = ch;
-        TRead::read(tcompat, e, ctx);
+        TRead::read(&tcompat, e, ctx);
         if (tcompat.two) {
             tcompat.two->setParent(ch);
             tcompat.two->setDurationType(ch->durationType());
@@ -2623,6 +2626,20 @@ bool TRead::readProperties(Chord* ch, XmlReader& e, ReadContext& ctx)
         } else {
             UNREACHABLE;
         }
+    } else if (tag == "TremoloSingleChord") {
+        TremoloSingleChord* trem = Factory::createTremoloSingleChord(ch);
+        trem->setTrack(ch->track());
+        TRead::read(trem, e, ctx);
+        trem->setParent(ch);
+        trem->setDurationType(ch->durationType());
+        ch->setTremoloSingleChord(trem);
+    } else if (tag == "TremoloTwoChord") {
+        TremoloTwoChord* trem = Factory::createTremoloTwoChord(ch);
+        trem->setTrack(ch->track());
+        TRead::read(trem, e, ctx);
+        trem->setParent(ch);
+        trem->setDurationType(ch->durationType());
+        ch->setTremoloTwoChord(trem, false);
     } else if (tag == "tickOffset") {      // obsolete
     } else if (tag == "ChordLine") {
         ChordLine* cl = Factory::createChordLine(ch);
@@ -3160,8 +3177,7 @@ void TRead::read(LayoutBreak* b, XmlReader& e, ReadContext& ctx)
             TRead::readProperty(b, e, ctx, Pid::START_WITH_LONG_NAMES);
         } else if (tag == "startWithMeasureOne") {
             TRead::readProperty(b, e, ctx, Pid::START_WITH_MEASURE_ONE);
-        } else if (tag == "firstSystemIndentation"
-                   || tag == "firstSystemIdentation" /* pre-4.0 typo */) {
+        } else if (tag == "firstSystemIndentation") {
             TRead::readProperty(b, e, ctx, Pid::FIRST_SYSTEM_INDENTATION);
         } else if (!readItemProperties(b, e, ctx)) {
             e.unknown();
@@ -3676,7 +3692,7 @@ void TRead::read(Pedal* p, XmlReader& e, ReadContext& ctx)
         }
     }
 
-    if (p->score()->mscVersion() < 420) {
+    if (p->score()->mscVersion() < 420 && !ctx.pasteMode()) {
         // Set to the pre-420 defaults if no value was specified;
         // or follow the new style setting if the specified value matches it
         if (!beginTextTag) {
@@ -4398,51 +4414,27 @@ int TRead::read(SigEvent* item, XmlReader& e, int fileDivision)
     return tick;
 }
 
-void TRead::read(TremoloDispatcher* t, XmlReader& e, ReadContext& ctx)
+void TRead::read(TremoloTwoChord* t, XmlReader& xml, ReadContext& ctx)
 {
-    while (e.readNextStartElement()) {
-        const AsciiStringView tag(e.name());
-        if (tag == "subtype") {
-            t->setTremoloType(TConv::fromXml(e.readAsciiText(), TremoloType::INVALID_TREMOLO));
-        }
-        // Style needs special handling other than readStyledProperty()
-        // to avoid calling customStyleApplicable() in setProperty(),
-        // which cannot be called now because durationType() isn't defined yet.
-        else if (tag == "strokeStyle") {
-            t->setTremoloStyle(TremoloStyle(e.readInt()));
-            t->setPropertyFlags(Pid::TREMOLO_STYLE, PropertyFlags::UNSTYLED);
-        } else if (tag == "Fragment") {
-            BeamFragment f = BeamFragment();
-            int idx = (t->direction() == DirectionV::AUTO || t->direction() == DirectionV::DOWN) ? 0 : 1;
-            t->setUserModified(t->direction(), true);
-            double _spatium = t->spatium();
-            while (e.readNextStartElement()) {
-                const AsciiStringView tag1(e.name());
-                if (tag1 == "y1") {
-                    f.py1[idx] = e.readDouble() * _spatium;
-                } else if (tag1 == "y2") {
-                    f.py2[idx] = e.readDouble() * _spatium;
-                } else {
-                    e.unknown();
-                }
-            }
-            t->setBeamFragment(f);
-        } else if (tag == "play") {
-            t->setPlayTremolo(e.readBool());
-        } else if (TRead::readStyledProperty(t, tag, e, ctx)) {
-        } else if (!readItemProperties(t, e, ctx)) {
-            e.unknown();
-        }
-    }
+    compat::TremoloCompat tc;
+    tc.two = t;
+    read(&tc, xml, ctx);
 }
 
-void TRead::read(TremoloCompat& t, XmlReader& e, ReadContext& ctx)
+void TRead::read(TremoloSingleChord* t, XmlReader& xml, ReadContext& ctx)
 {
-    auto item = [](TremoloCompat& t) -> EngravingItem* {
-        if (t.two) {
-            return t.two;
+    compat::TremoloCompat tc;
+    tc.single = t;
+    read(&tc, xml, ctx);
+}
+
+void TRead::read(compat::TremoloCompat* tc, XmlReader& e, ReadContext& ctx)
+{
+    auto item = [](compat::TremoloCompat* tc) -> EngravingItem* {
+        if (tc->two) {
+            return tc->two;
         }
-        return t.single;
+        return tc->single;
     };
 
     while (e.readNextStartElement()) {
@@ -4450,32 +4442,36 @@ void TRead::read(TremoloCompat& t, XmlReader& e, ReadContext& ctx)
         if (tag == "subtype") {
             TremoloType type = TConv::fromXml(e.readAsciiText(), TremoloType::INVALID_TREMOLO);
             if (isTremoloTwoChord(type)) {
-                t.two = Factory::createTremoloTwoChord(t.parent);
-                t.two->setTrack(t.parent->track());
-                t.two->setTremoloType(type);
+                if (!tc->two) {
+                    tc->two = Factory::createTremoloTwoChord(tc->parent);
+                    tc->two->setTrack(tc->parent->track());
+                }
+                tc->two->setTremoloType(type);
             } else {
-                t.single = Factory::createTremoloSingleChord(t.parent);
-                t.single->setTrack(t.parent->track());
-                t.single->setTremoloType(type);
+                if (!tc->single) {
+                    tc->single = Factory::createTremoloSingleChord(tc->parent);
+                    tc->single->setTrack(tc->parent->track());
+                }
+                tc->single->setTremoloType(type);
             }
         }
         // Style needs special handling other than readStyledProperty()
         // to avoid calling customStyleApplicable() in setProperty(),
         // which cannot be called now because durationType() isn't defined yet.
         else if (tag == "strokeStyle") {
-            if (t.two) {
-                t.two->setTremoloStyle(TremoloStyle(e.readInt()));
-                t.two->setPropertyFlags(Pid::TREMOLO_STYLE, PropertyFlags::UNSTYLED);
+            if (tc->two) {
+                tc->two->setTremoloStyle(TremoloStyle(e.readInt()));
+                tc->two->setPropertyFlags(Pid::TREMOLO_STYLE, PropertyFlags::UNSTYLED);
             } else {
                 UNREACHABLE;
                 e.skipCurrentElement();
             }
         } else if (tag == "Fragment") {
-            if (t.two) {
+            if (tc->two) {
                 BeamFragment f = BeamFragment();
-                int idx = (t.two->direction() == DirectionV::AUTO || t.two->direction() == DirectionV::DOWN) ? 0 : 1;
-                t.two->setUserModified(t.two->direction(), true);
-                double _spatium = t.two->spatium();
+                int idx = (tc->two->direction() == DirectionV::AUTO || tc->two->direction() == DirectionV::DOWN) ? 0 : 1;
+                tc->two->setUserModified(tc->two->direction(), true);
+                double _spatium = tc->two->spatium();
                 while (e.readNextStartElement()) {
                     const AsciiStringView tag1(e.name());
                     if (tag1 == "y1") {
@@ -4486,21 +4482,21 @@ void TRead::read(TremoloCompat& t, XmlReader& e, ReadContext& ctx)
                         e.unknown();
                     }
                 }
-                t.two->setBeamFragment(f);
+                tc->two->setBeamFragment(f);
             } else {
                 UNREACHABLE;
                 e.skipCurrentElement();
             }
         } else if (tag == "play") {
-            if (t.two) {
-                t.two->setPlayTremolo(e.readBool());
-            } else if (t.single) {
-                t.single->setPlayTremolo(e.readBool());
+            if (tc->two) {
+                tc->two->setPlayTremolo(e.readBool());
+            } else if (tc->single) {
+                tc->single->setPlayTremolo(e.readBool());
             } else {
                 UNREACHABLE;
             }
-        } else if (TRead::readStyledProperty(item(t), tag, e, ctx)) {
-        } else if (!readItemProperties(item(t), e, ctx)) {
+        } else if (TRead::readStyledProperty(item(tc), tag, e, ctx)) {
+        } else if (!readItemProperties(item(tc), e, ctx)) {
             e.unknown();
         }
     }

@@ -58,11 +58,15 @@ public:
 
     void addLineAttachPoints();
 
+    void setStaffMove(int val) { m_staffMove = val; }
+    staff_idx_t vStaffIdx() const override { return staffIdx() + m_staffMove; }
+
 protected:
     void changeAnchor(EditData&, EngravingItem*) override;
 
 private:
 
+    int m_staffMove = 0;
     std::array<PointF, static_cast<size_t>(Grip::GRIPS)> m_adjustmentOffsets;
 };
 
@@ -107,6 +111,8 @@ public:
     const TieSegment* segmentAt(int n) const { return toTieSegment(Spanner::segmentAt(n)); }
 
     SlurTieSegment* newSlurTieSegment(System* parent) override { return new TieSegment(parent); }
+
+    double scalingFactor() const override;
 
 private:
     static Note* editStartNote;

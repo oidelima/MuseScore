@@ -180,6 +180,7 @@ static const std::vector<Item<ElementType> > ELEMENT_TYPES = {
     { ElementType::ACCIDENTAL,           "Accidental",           TranslatableString("engraving", "Accidental") },
     { ElementType::LEDGER_LINE,          "LedgerLine",           TranslatableString("engraving", "Ledger line") },
     { ElementType::STEM,                 "Stem",                 TranslatableString("engraving", "Stem") },
+    { ElementType::HOOK,                 "Hook",                 TranslatableString("engraving", "Flag") }, // internally called "Hook", but "Flag" in SMuFL, so here externally too
     { ElementType::NOTE,                 "Note",                 TranslatableString("engraving", "Note") },
     { ElementType::CLEF,                 "Clef",                 TranslatableString("engraving", "Clef") },
     { ElementType::KEYSIG,               "KeySig",               TranslatableString("engraving", "Key signature") },
@@ -199,7 +200,6 @@ static const std::vector<Item<ElementType> > ELEMENT_TYPES = {
     { ElementType::EXPRESSION,           "Expression",           TranslatableString("engraving", "Expression") },
     { ElementType::BEAM,                 "Beam",                 TranslatableString("engraving", "Beam") },
     { ElementType::BEAM_SEGMENT,         "BeamSegment",          TranslatableString("engraving", "Beam segment") },
-    { ElementType::HOOK,                 "Hook",                 TranslatableString("engraving", "Flag") }, // internally called "Hook", but "Flag" in SMuFL, so here externally too
     { ElementType::LYRICS,               "Lyrics",               TranslatableString("engraving", "Lyrics") },
     { ElementType::FIGURED_BASS,         "FiguredBass",          TranslatableString("engraving", "Figured bass") },
     { ElementType::FIGURED_BASS_ITEM,    "FiguredBassItem",      TranslatableString("engraving", "Figured bass item") },
@@ -210,6 +210,7 @@ static const std::vector<Item<ElementType> > ELEMENT_TYPES = {
     { ElementType::TEMPO_TEXT,           "Tempo",                TranslatableString("engraving", "Tempo") },
     { ElementType::STAFF_TEXT,           "StaffText",            TranslatableString("engraving", "Staff text") },
     { ElementType::SYSTEM_TEXT,          "SystemText",           TranslatableString("engraving", "System text") },
+    { ElementType::SOUND_FLAG,           "SoundFlag",            TranslatableString("engraving", "Sound flag") },
     { ElementType::PLAYTECH_ANNOTATION,  "PlayTechAnnotation",   TranslatableString("engraving", "Playing technique annotation") },
     { ElementType::CAPO,                 "Capo",                 TranslatableString("engraving", "Capo") },
     { ElementType::STRING_TUNINGS,       "StringTunings",        TranslatableString("engraving", "String tunings") },

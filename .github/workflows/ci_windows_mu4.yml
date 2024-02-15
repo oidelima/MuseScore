@@ -31,7 +31,7 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.11.0
+      uses: styfle/cancel-workflow-action@0.12.1
       with:
         access_token: ${{ github.token }}
     - name: Clone repository (default)
@@ -157,6 +157,10 @@ jobs:
     - name: Generate _en.ts files
       if: env.DO_BUILD == 'true'
       shell: bash
+      env:
+        LUPDATE_ARGS: ""
+        POSTPROCESS_ARGS: "--warn-only ${{ env.DO_PLACEHOLDER_TRANSLATIONS == 'true' && '--generate-placeholder-translations' || '' }}"
+        POSTPROCESS_LAUNCHER: "python3 -X utf8"
       run: |
         bash ./build/ci/translation/run_lupdate.sh
     - name: Update .ts files
@@ -165,11 +169,6 @@ jobs:
       run: |
         bash ./build/ci/translation/tx_install.sh -t ${{ secrets.TRANSIFEX_API_TOKEN }} -s windows
         bash ./build/ci/translation/tx_pull.sh
-    - name: Generate placeholder.ts files
-      if: env.DO_PLACEHOLDER_TRANSLATIONS == 'true'
-      shell: bash
-      run: |
-        python3 -X utf8 ./tools/translations/placeholder_translations.py --warn-only
     - name: Build
       if: env.DO_BUILD == 'true'
       shell: cmd
@@ -211,7 +210,7 @@ jobs:
         bash ./build/ci/tools/sparkle_appcast_gen.sh -p windows 
     - name: Upload artifacts on GitHub
       if: ${{ always() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.UPLOAD_ARTIFACT_NAME }}
         path: build.artifacts\ 
@@ -221,7 +220,7 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.11.0
+      uses: styfle/cancel-workflow-action@0.12.1
       with:
         access_token: ${{ github.token }}
     - name: Clone repository (default)
@@ -339,7 +338,7 @@ jobs:
         bash ./build/ci/tools/osuosl/publish.sh -s ${{ secrets.OSUOSL_SSH_ENCRYPT_SECRET }} --os windows -v 4 --arch x86_64-portable
     - name: Upload artifacts on GitHub
       if: env.DO_BUILD == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.UPLOAD_ARTIFACT_NAME }}
         path: build.artifacts\

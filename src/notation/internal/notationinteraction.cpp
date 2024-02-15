@@ -1264,7 +1264,8 @@ bool NotationInteraction::isDropAccepted(const PointF& pos, Qt::KeyboardModifier
     case ElementType::CAPO:
     case ElementType::STRING_TUNINGS:
     case ElementType::NOTEHEAD:
-    case ElementType::TREMOLO:
+    case ElementType::TREMOLO_SINGLECHORD:
+    case ElementType::TREMOLO_TWOCHORD:
     case ElementType::LAYOUT_BREAK:
     case ElementType::MARKER:
     case ElementType::STAFF_STATE:
@@ -1423,7 +1424,8 @@ bool NotationInteraction::drop(const PointF& pos, Qt::KeyboardModifiers modifier
     case ElementType::CAPO:
     case ElementType::STRING_TUNINGS:
     case ElementType::NOTEHEAD:
-    case ElementType::TREMOLO:
+    case ElementType::TREMOLO_SINGLECHORD:
+    case ElementType::TREMOLO_TWOCHORD:
     case ElementType::LAYOUT_BREAK:
     case ElementType::MARKER:
     case ElementType::STAFF_STATE:
@@ -1460,6 +1462,7 @@ bool NotationInteraction::drop(const PointF& pos, Qt::KeyboardModifiers modifier
         }
 
         EngravingItem* dropElement = el->drop(m_dropData.ed);
+
         if (dropElement && dropElement->isInstrumentChange()) {
             if (!selectInstrument(toInstrumentChange(dropElement))) {
                 rollback();
@@ -1945,7 +1948,8 @@ void NotationInteraction::applyDropPaletteElement(mu::engraving::Score* score, m
         rw::RWRegister::reader()->readItem(dropData->dropElement, n);
         dropData->dropElement->styleChanged();       // update to local style
 
-        mu::engraving::EngravingItem* el = target->drop(*dropData);
+        EngravingItem* el = target->drop(*dropData);
+
         if (el && el->isInstrumentChange()) {
             if (!selectInstrument(toInstrumentChange(el))) {
                 rollback();
@@ -2181,6 +2185,7 @@ EngravingItem* NotationInteraction::dropTarget(mu::engraving::EditData& ed) cons
             }
             e = mu::engraving::toStaffLines(e)->measure();
         }
+
         if (e->acceptDrop(ed)) {
             return e;
         }
@@ -4200,9 +4205,19 @@ void NotationInteraction::addText(TextStyleType type, EngravingItem* item)
         return;
     }
 
+    if (textBox->isInstrumentChange()) {
+        if (!selectInstrument(toInstrumentChange(textBox))) {
+            rollback();
+            return;
+        }
+    }
+
     apply();
     showItem(textBox);
-    startEditText(textBox);
+
+    if (!textBox->isInstrumentChange()) {
+        startEditText(textBox);
+    }
 }
 
 mu::Ret NotationInteraction::canAddImageToItem(const EngravingItem* item) const
@@ -4483,6 +4498,7 @@ ScoreConfig NotationInteraction::scoreConfig() const
     config.isShowUnprintableElements = score()->showUnprintable();
     config.isShowFrames = score()->showFrames();
     config.isShowPageMargins = score()->showPageborders();
+    config.isShowSoundFlags = score()->showSoundFlags();
     config.isMarkIrregularMeasures = score()->markIrregularMeasures();
 
     return config;
@@ -4499,6 +4515,7 @@ void NotationInteraction::setScoreConfig(const ScoreConfig& config)
     score()->setShowUnprintable(config.isShowUnprintableElements);
     score()->setShowFrames(config.isShowFrames);
     score()->setShowPageborders(config.isShowPageMargins);
+    score()->setShowSoundFlags(config.isShowSoundFlags);
     score()->setMarkIrregularMeasures(config.isMarkIrregularMeasures);
 
     EngravingItem* selectedElement = selection()->element();
@@ -4662,7 +4679,9 @@ void NotationInteraction::navigateToLyrics(bool back, bool moveOnly, bool end)
             break;
         }
         // for the same reason, it cannot have a melisma
-        fromLyrics->undoChangeProperty(mu::engraving::Pid::LYRIC_TICKS, Fraction::fromTicks(0));
+        if (fromLyrics->separator() && !fromLyrics->separator()->isEndMelisma()) {
+            fromLyrics->undoChangeProperty(mu::engraving::Pid::LYRIC_TICKS, Fraction::fromTicks(0));
+        }
     }
 
     if (newLyrics) {

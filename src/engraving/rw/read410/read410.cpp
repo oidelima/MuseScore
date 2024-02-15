@@ -35,7 +35,6 @@
 #include "dom/tuplet.h"
 #include "dom/chord.h"
 #include "dom/beam.h"
-#include "dom/tremolo.h"
 #include "dom/lyrics.h"
 #include "dom/note.h"
 #include "dom/measurerepeat.h"
@@ -50,6 +49,7 @@
 #include "dom/figuredbass.h"
 #include "dom/tremolotwochord.h"
 
+#include "../compat/tremolocompat.h"
 #include "staffread.h"
 #include "tread.h"
 
@@ -153,6 +153,8 @@ bool Read410::readScore410(Score* score, XmlReader& e, ReadContext& ctx)
             score->m_showFrames = e.readInt();
         } else if (tag == "showMargins") {
             score->m_showPageborders = e.readInt();
+        } else if (tag == "showSoundFlags") {
+            score->m_showSoundFlags = e.readInt();
         } else if (tag == "markIrregularMeasures") {
             score->m_markIrregularMeasures = e.readInt();
         } else if (tag == "Style") {
@@ -284,8 +286,6 @@ bool Read410::readScore410(Score* score, XmlReader& e, ReadContext& ctx)
     for (int idx : sysStaves) {
         score->addSystemObjectStaff(score->staff(idx));
     }
-
-//      createPlayEvents();
 
     return true;
 }
@@ -590,6 +590,7 @@ bool Read410::pasteStaff(XmlReader& e, Segment* dst, staff_idx_t dstStaff, Fract
                            || tag == "Image"
                            || tag == "Text"
                            || tag == "StaffText"
+                           || tag == "SoundFlag"
                            || tag == "PlayTechAnnotation"
                            || tag == "Capo"
                            || tag == "StringTunings"
@@ -903,7 +904,7 @@ void Read410::pasteSymbols(XmlReader& e, ChordRest* dst)
                             score->undoAddElement(el);
                         }
                     } else if (tag == "StaffText" || tag == "PlayTechAnnotation" || tag == "Capo" || tag == "Sticking"
-                               || tag == "HarpPedalDiagram" || tag == "StringTunings") {
+                               || tag == "SoundFlag" || tag == "HarpPedalDiagram" || tag == "StringTunings") {
                         EngravingItem* el = Factory::createItemByName(tag, score->dummy());
                         TRead::readItem(el, e, ctx);
                         el->setTrack(destTrack);
@@ -1030,6 +1031,17 @@ void Read410::pasteSymbols(XmlReader& e, ChordRest* dst)
         }                                 // outer while readNextstartElement()
     }                                     // inner while readNextstartElement()
 }                                         // pasteSymbolList()
+
+void Read410::readTremoloCompat(compat::TremoloCompat* tc, XmlReader& xml)
+{
+    IF_ASSERT_FAILED(tc->parent) {
+        return;
+    }
+
+    ReadContext ctx(tc->parent->score());
+    ctx.setPasteMode(true);
+    TRead::read(tc, xml, ctx);
+}
 
 void Read410::doReadItem(EngravingItem* item, XmlReader& xml)
 {

@@ -62,7 +62,7 @@
 #include "engraving/dom/text.h"
 #include "engraving/dom/timesig.h"
 #include "engraving/dom/tuplet.h"
-#include "engraving/dom/tremolo.h"
+#include "engraving/dom/tremolosinglechord.h"
 #include "engraving/dom/volta.h"
 #include "engraving/dom/chordlist.h"
 #include "engraving/dom/rehearsalmark.h"
@@ -1823,25 +1823,25 @@ void OveToMScore::convertArticulation(
     // case ovebase::ArticulationType::Sharp_Accidental_For_Trill:
     // case ovebase::ArticulationType::Natural_Accidental_For_Trill:
     case ovebase::ArticulationType::Tremolo_Eighth: {
-        TremoloDispatcher* t = Factory::createTremoloDispatcher(cr);
+        TremoloSingleChord* t = Factory::createTremoloSingleChord(cr);
         t->setTremoloType(TremoloType::R8);
         cr->add(t);
         break;
     }
     case ovebase::ArticulationType::Tremolo_Sixteenth: {
-        TremoloDispatcher* t = Factory::createTremoloDispatcher(cr);
+        TremoloSingleChord* t = Factory::createTremoloSingleChord(cr);
         t->setTremoloType(TremoloType::R16);
         cr->add(t);
         break;
     }
     case ovebase::ArticulationType::Tremolo_Thirty_Second: {
-        TremoloDispatcher* t = Factory::createTremoloDispatcher(cr);
+        TremoloSingleChord* t = Factory::createTremoloSingleChord(cr);
         t->setTremoloType(TremoloType::R32);
         cr->add(t);
         break;
     }
     case ovebase::ArticulationType::Tremolo_Sixty_Fourth: {
-        TremoloDispatcher* t = Factory::createTremoloDispatcher(cr);
+        TremoloSingleChord* t = Factory::createTremoloSingleChord(cr);
         t->setTremoloType(TremoloType::R64);
         cr->add(t);
         break;
@@ -2505,7 +2505,6 @@ void OveToMScore::convertWedges(Measure* measure, int part, int staff, int track
             hp->setTick2(Fraction::fromTicks(absTick2));
             hp->setAnchor(Spanner::Anchor::SEGMENT);
             m_score->addSpanner(hp);
-            m_score->updateHairpin(hp);
         }
     }
 }

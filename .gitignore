@@ -68,5 +68,7 @@ VERSION
 
 temp_*
 
+*.local.cmake
+
 #python
 */venv

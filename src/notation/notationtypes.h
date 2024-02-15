@@ -153,6 +153,7 @@ using voice_idx_t = mu::engraving::voice_idx_t;
 using track_idx_t = mu::engraving::track_idx_t;
 using ChangesRange = mu::engraving::ScoreChangesRange;
 using GuitarBendType = mu::engraving::GuitarBendType;
+using engraving::LoopBoundaryType;
 
 static const String COMMON_GENRE_ID("common");
 
@@ -523,18 +524,11 @@ struct TupletOptions
     bool autoBaseLen = false;
 };
 
-enum class LoopBoundaryType
-{
-    Unknown,
-    LoopIn,
-    LoopOut
-};
-
 struct LoopBoundaries
 {
     int loopInTick = 0;
     int loopOutTick = 0;
-    bool visible = false;
+    bool enabled = false;
 
     bool isNull() const
     {
@@ -547,7 +541,7 @@ struct LoopBoundaries
 
         equals &= loopInTick == boundaries.loopInTick;
         equals &= loopOutTick == boundaries.loopOutTick;
-        equals &= visible == boundaries.visible;
+        equals &= enabled == boundaries.enabled;
 
         return equals;
     }
@@ -564,6 +558,7 @@ enum class ScoreConfigType
     ShowUnprintableElements,
     ShowFrames,
     ShowPageMargins,
+    ShowSoundFlags,
     MarkIrregularMeasures
 };
 
@@ -573,6 +568,7 @@ struct ScoreConfig
     bool isShowUnprintableElements = false;
     bool isShowFrames = false;
     bool isShowPageMargins = false;
+    bool isShowSoundFlags = false;
     bool isMarkIrregularMeasures = false;
 
     bool operator==(const ScoreConfig& conf) const
@@ -581,6 +577,7 @@ struct ScoreConfig
         equal &= (isShowUnprintableElements == conf.isShowUnprintableElements);
         equal &= (isShowFrames == conf.isShowFrames);
         equal &= (isShowPageMargins == conf.isShowPageMargins);
+        equal &= (isShowSoundFlags == conf.isShowSoundFlags);
         equal &= (isMarkIrregularMeasures == conf.isMarkIrregularMeasures);
 
         return equal;

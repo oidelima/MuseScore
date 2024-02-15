@@ -272,6 +272,11 @@ void AbstractNotationPaintView::onLoadNotation(INotationPtr)
         updateLoopMarkers();
     });
 
+    m_notation->viewModeChanged().onNotify(this, [this]() {
+        updateLoopMarkers();
+        ensureViewportInsideScrollableArea();
+    });
+
     if (isMainView()) {
         connect(this, &QQuickPaintedItem::focusChanged, this, [this](bool focused) {
             if (notation()) {
@@ -370,9 +375,7 @@ void AbstractNotationPaintView::onViewSizeChanged()
 
     ensureViewportInsideScrollableArea();
 
-    if (m_playbackCursor->visible()) {
-        scheduleRedraw();
-    }
+    scheduleRedraw();
 
     emit horizontalScrollChanged();
     emit verticalScrollChanged();
@@ -388,8 +391,8 @@ void AbstractNotationPaintView::updateLoopMarkers()
     m_loopInMarker->move(loop.loopInTick);
     m_loopOutMarker->move(loop.loopOutTick);
 
-    m_loopInMarker->setVisible(loop.visible);
-    m_loopOutMarker->setVisible(loop.visible);
+    m_loopInMarker->setVisible(loop.enabled);
+    m_loopOutMarker->setVisible(loop.enabled);
 
     scheduleRedraw();
 }

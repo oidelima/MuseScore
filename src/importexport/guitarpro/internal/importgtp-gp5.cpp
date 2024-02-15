@@ -62,7 +62,7 @@
 #include "engraving/dom/text.h"
 #include "engraving/dom/tie.h"
 #include "engraving/dom/timesig.h"
-#include "engraving/dom/tremolo.h"
+#include "engraving/dom/tremolosinglechord.h"
 #include "engraving/dom/tremolobar.h"
 #include "engraving/dom/tuplet.h"
 #include "engraving/dom/volta.h"
@@ -1000,9 +1000,22 @@ bool GuitarPro5::read(IODevice* io)
                         s->setTrack(n->track());
                         s->setParent(n);
                         s->setGlissandoType(GlissandoType::STRAIGHT);
+                        s->setGlissandoShift(true);
                         s->setEndElement(nt);
                         s->setTick2(nt->chord()->segment()->tick());
                         s->setTrack2(n->track());
+
+                        for (Spanner* spanner : n->chord()->startingSpanners()) {
+                            if (spanner && spanner->isSlur()) {
+                                Slur* slur = toSlur(spanner);
+                                if (slur->endElement() == nt->chord()) {
+                                    slur->setConnectedElement(mu::engraving::Slur::ConnectedElement::GLISSANDO);
+                                    s->setGlissandoShift(false);
+                                    break;
+                                }
+                            }
+                        }
+
                         score->addElement(s);
                         br = true;
                         break;
@@ -1163,10 +1176,11 @@ GuitarPro::ReadNoteResult GuitarPro5::readNoteEffects(Note* note)
 
     if (modMask2 & EFFECT_TREMOLO) {      // tremolo picking length
         int tremoloDivision = readUInt8();
-        Chord* chord = note->chord();
-        TremoloDispatcher* t = Factory::createTremoloDispatcher(chord);
         if (tremoloDivision >= 1 && tremoloDivision <= 3) {
             TremoloType type = tremoloType(tremoloDivision);
+            DO_ASSERT(!isTremoloTwoChord(type));
+            Chord* chord = note->chord();
+            TremoloSingleChord* t = Factory::createTremoloSingleChord(chord);
             t->setTremoloType(type);
             chord->add(t);
             m_tremolosInChords[chord] = type;
@@ -1535,8 +1549,9 @@ GuitarPro::ReadNoteResult GuitarPro5::readNote(int string, Note* note)
                         note->setPitch(note2->pitch());
                         true_note = note2;
                         if (m_tremolosInChords.find(chord2) != m_tremolosInChords.end()) {
-                            TremoloDispatcher* t = Factory::createTremoloDispatcher(score->dummy()->chord());
                             TremoloType type = m_tremolosInChords.at(chord2);
+                            DO_ASSERT(!isTremoloTwoChord(type));
+                            TremoloSingleChord* t = Factory::createTremoloSingleChord(score->dummy()->chord());
                             t->setTremoloType(type);
                             chord->add(t);
                             mu::remove(m_tremolosInChords, chord2);

@@ -75,12 +75,12 @@
 #include "dom/stringtunings.h"
 #include "dom/symbol.h"
 #include "dom/systemtext.h"
+#include "dom/soundflag.h"
 #include "dom/tempotext.h"
 #include "dom/text.h"
 #include "dom/textline.h"
 #include "dom/textlinebase.h"
 #include "dom/timesig.h"
-#include "dom/tremolo.h"
 #include "dom/tremolosinglechord.h"
 #include "dom/tremolotwochord.h"
 #include "dom/tremolobar.h"
@@ -202,6 +202,8 @@ void SingleLayout::layoutItem(EngravingItem* item)
         break;
     case ElementType::SYSTEM_TEXT:  layout(toSystemText(item), ctx);
         break;
+    case ElementType::SOUND_FLAG:   layout(item_cast<SoundFlag*>(item), ctx);
+        break;
     case ElementType::TEMPO_TEXT:   layout(toTempoText(item), ctx);
         break;
     case ElementType::TEXT:         layout(toText(item), ctx);
@@ -210,14 +212,6 @@ void SingleLayout::layoutItem(EngravingItem* item)
         break;
     case ElementType::TIMESIG:      layout(toTimeSig(item), ctx);
         break;
-    case ElementType::TREMOLO: {
-        TremoloDispatcher* td = item_cast<TremoloDispatcher*>(item);
-        if (td->singleChord) {
-            layout(td->singleChord, ctx);
-        } else {
-            layout(td->twoChord, ctx);
-        }
-    } break;
     case ElementType::TREMOLO_SINGLECHORD: layout(item_cast<TremoloSingleChord*>(item), ctx);
         break;
     case ElementType::TREMOLO_TWOCHORD:    layout(item_cast<TremoloTwoChord*>(item), ctx);
@@ -778,6 +772,7 @@ void SingleLayout::layout(Capo* item, const Context& ctx)
 void SingleLayout::layout(Chord* item, const Context& ctx)
 {
     LayoutContext tctx(ctx.dontUseScore());
+    ChordLayout::computeUp(item, tctx);
     ChordLayout::layout(item, tctx);
     ChordLayout::layoutStem(item, tctx);
 }
@@ -1427,6 +1422,26 @@ void SingleLayout::layout(Spacer* item, const Context&)
 void SingleLayout::layout(StaffText* item, const Context& ctx)
 {
     layoutTextBase(item, ctx, item->mutldata());
+
+    if (item->hasSoundFlag()) {
+        RectF bbox = item->ldata()->bbox();
+        double iconHeight = bbox.height();
+        RectF iconBBox = RectF(bbox.x(), bbox.y(), iconHeight, iconHeight);
+        item->soundFlag()->mutldata()->setBbox(iconBBox);
+
+        double xMove = iconBBox.width() + iconBBox.width() / 2.0;
+        bbox.setWidth(bbox.width() + xMove);
+        item->setbbox(bbox);
+
+        layout(item->soundFlag(), ctx);
+
+        for (TextBlock& block : item->mutldata()->blocks) {
+            auto& fragments = block.fragments();
+            for (std::list<TextFragment>::iterator it = fragments.begin(); it != fragments.end(); ++it) {
+                it->pos.setX(it->pos.x() + xMove);
+            }
+        }
+    }
 }
 
 void SingleLayout::layout(StaffTypeChange* item, const Context& ctx)
@@ -1463,6 +1478,12 @@ void SingleLayout::layout(Symbol* item, const Context&)
 void SingleLayout::layout(SystemText* item, const Context& ctx)
 {
     layoutTextBase(item, ctx, item->mutldata());
+}
+
+void SingleLayout::layout(SoundFlag* item, const Context& ctx)
+{
+    UNUSED(item);
+    UNUSED(ctx);
 }
 
 void SingleLayout::layout(TempoText* item, const Context& ctx)

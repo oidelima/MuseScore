@@ -86,6 +86,12 @@ public:
     std::string auxChannelName(audio::aux_channel_idx_t index) const override;
     async::Channel<audio::aux_channel_idx_t, std::string> auxChannelNameChanged() const override;
 
+    async::Promise<audio::SoundPresetList> availableSoundPresets(engraving::InstrumentTrackId instrumentTrackId) const override;
+
+    notation::INotationSoloMuteState::SoloMuteState trackSoloMuteState(const engraving::InstrumentTrackId& trackId) const override;
+    void setTrackSoloMuteState(const engraving::InstrumentTrackId& trackId,
+                               const notation::INotationSoloMuteState::SoloMuteState& state) const override;
+
     void playElements(const std::vector<const notation::EngravingItem*>& elements) override;
     void playMetronome(int tick) override;
     void seekElement(const notation::EngravingItem* element) override;
@@ -165,8 +171,8 @@ private:
     void addLoopBoundaryToTick(notation::LoopBoundaryType type, int tick);
     void updateLoop();
 
-    void showLoop();
-    void hideLoop();
+    void enableLoop();
+    void disableLoop();
 
     void notifyActionCheckedChanged(const actions::ActionCode& actionCode);
 

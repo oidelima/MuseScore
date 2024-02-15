@@ -76,10 +76,12 @@
 #include "engraving/dom/stafftext.h"
 #include "engraving/dom/stringtunings.h"
 #include "engraving/dom/systemtext.h"
+#include "engraving/dom/soundflag.h"
 #include "engraving/dom/tempotext.h"
 #include "engraving/dom/textline.h"
 #include "engraving/dom/timesig.h"
-#include "engraving/dom/tremolo.h"
+#include "engraving/dom/tremolosinglechord.h"
+#include "engraving/dom/tremolotwochord.h"
 #include "engraving/dom/tremolobar.h"
 #include "engraving/dom/trill.h"
 #include "engraving/dom/vibrato.h"
@@ -104,6 +106,7 @@ MAKE_ELEMENT(Hairpin, score->dummy()->segment())
 MAKE_ELEMENT(SystemText, score->dummy()->segment())
 MAKE_ELEMENT(TempoText, score->dummy()->segment())
 MAKE_ELEMENT(StaffText, score->dummy()->segment())
+MAKE_ELEMENT(SoundFlag, score->dummy()->segment())
 MAKE_ELEMENT(Expression, score->dummy()->segment())
 MAKE_ELEMENT(PlayTechAnnotation, score->dummy()->segment())
 MAKE_ELEMENT(Capo, score->dummy()->segment())
@@ -133,6 +136,7 @@ PaletteTreePtr PaletteCreator::newMasterPaletteTree()
     tree->append(newRepeatsPalette());
     tree->append(newBarLinePalette());
     tree->append(newLayoutPalette());
+    tree->append(newPlaybackPalette());
     tree->append(newBracketsPalette());
     tree->append(newOrnamentsPalette());
     tree->append(newBreathPalette());
@@ -169,6 +173,7 @@ PaletteTreePtr PaletteCreator::newDefaultPaletteTree()
     defaultPalette->append(newRepeatsPalette(true));
     defaultPalette->append(newBarLinePalette(true));
     defaultPalette->append(newLayoutPalette());
+    defaultPalette->append(newPlaybackPalette());
     defaultPalette->append(newBracketsPalette());
     defaultPalette->append(newOrnamentsPalette(true));
     defaultPalette->append(newBreathPalette(true));
@@ -572,6 +577,22 @@ PalettePtr PaletteCreator::newLayoutPalette()
     return sp;
 }
 
+PalettePtr PaletteCreator::newPlaybackPalette()
+{
+    PalettePtr sp = std::make_shared<Palette>(Palette::Type::Playback);
+    sp->setName(QT_TRANSLATE_NOOP("palette", "Playback"));
+    sp->setGridSize(100, 28);
+    sp->setMag(0.85);
+    sp->setDrawGrid(true);
+
+    auto staffText = makeElement<StaffText>(gpaletteScore);
+    staffText->setSoundFlag(Factory::createSoundFlag(staffText.get()));
+    staffText->setXmlText(String::fromAscii(QT_TRANSLATE_NOOP("palette", "Sound flag")));
+    sp->appendElement(staffText, QT_TRANSLATE_NOOP("palette", "Sound flag"))->setElementTranslated(true);
+
+    return sp;
+}
+
 PalettePtr PaletteCreator::newFingeringPalette(bool defaultPalette)
 {
     PalettePtr sp = std::make_shared<Palette>(Palette::Type::Fingering);
@@ -636,8 +657,14 @@ PalettePtr PaletteCreator::newTremoloPalette()
     sp->setDrawGrid(true);
     sp->setVisible(false);
 
-    for (int i = int(TremoloType::R8); i <= int(TremoloType::C64); ++i) {
-        auto tremolo = Factory::makeTremoloDispatcher(gpaletteScore->dummy()->chord());
+    for (int i = int(TremoloType::R8); i <= int(TremoloType::BUZZ_ROLL); ++i) {
+        auto tremolo = Factory::makeTremoloSingleChord(gpaletteScore->dummy()->chord());
+        tremolo->setTremoloType(TremoloType(i));
+        sp->appendElement(tremolo, tremolo->subtypeUserName());
+    }
+
+    for (int i = int(TremoloType::C8); i <= int(TremoloType::C64); ++i) {
+        auto tremolo = Factory::makeTremoloTwoChord(gpaletteScore->dummy()->chord());
         tremolo->setTremoloType(TremoloType(i));
         sp->appendElement(tremolo, tremolo->subtypeUserName());
     }
@@ -1115,7 +1142,7 @@ PalettePtr PaletteCreator::newBagpipeEmbellishmentPalette()
     sp->setName(QT_TRANSLATE_NOOP("palette", "Bagpipe embellishments"));
     sp->setMag(0.8);
     sp->setYOffset(2.0);
-    sp->setGridSize(55, 55);
+    sp->setGridSize(55, 72);
     sp->setDrawGrid(true);
     sp->setVisible(false);
 

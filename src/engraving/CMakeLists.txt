@@ -136,6 +136,7 @@ set(MODULE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/rw/compat/readchordlisthook.h
     ${CMAKE_CURRENT_LIST_DIR}/rw/compat/compatutils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/rw/compat/compatutils.h
+    ${CMAKE_CURRENT_LIST_DIR}/rw/compat/tremolocompat.h
 
     ${CMAKE_CURRENT_LIST_DIR}/compat/scoreaccess.cpp
     ${CMAKE_CURRENT_LIST_DIR}/compat/scoreaccess.h
@@ -302,6 +303,11 @@ set(MODULE_LINK
     draw
 )
 
+
+if (MUE_ENABLE_ENGRAVING_RENDER_DEBUG)
+    set(MODULE_DEF ${MODULE_DEF} -DMUE_ENABLE_ENGRAVING_RENDER_DEBUG)
+endif()
+
 if (MUE_ENABLE_ENGRAVING_LD_ACCESS)
     set(MODULE_DEF ${MODULE_DEF} -DMUE_ENABLE_ENGRAVING_LD_ACCESS)
 endif()
@@ -317,6 +323,6 @@ set_property(TARGET ${MODULE} APPEND PROPERTY AUTOMOC_MACRO_NAMES "BEGIN_QT_REGI
 
 #target_compile_options(${MODULE} PUBLIC -Wconversion)
 
-if (MUE_BUILD_UNIT_TESTS)
+if (MUE_BUILD_ENGRAVING_TESTS)
     add_subdirectory(tests)
 endif()

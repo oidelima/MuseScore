@@ -115,6 +115,8 @@ void PlaybackController::init()
 
     m_totalPlayTimeChanged.onNotify(this, [this]() {
         updateCurrentTempo();
+
+        updateLoop();
     });
 
     m_playbackPositionChanged.onNotify(this, [this]() {
@@ -171,7 +173,10 @@ bool PlaybackController::isLoaded() const
 
 bool PlaybackController::isLoopEnabled() const
 {
-    return notationPlayback() ? notationPlayback()->loopBoundaries().visible : false;
+    if (!notationPlayback()) {
+        return false;
+    }
+    return loopBoundariesSet() && notationPlayback()->loopBoundaries().enabled;
 }
 
 bool PlaybackController::loopBoundariesSet() const
@@ -264,6 +269,29 @@ std::string PlaybackController::auxChannelName(aux_channel_idx_t index) const
 Channel<aux_channel_idx_t, std::string> PlaybackController::auxChannelNameChanged() const
 {
     return m_auxChannelNameChanged;
+}
+
+Promise<SoundPresetList> PlaybackController::availableSoundPresets(InstrumentTrackId instrumentTrackId) const
+{
+    auto it = m_instrumentTrackIdMap.find(instrumentTrackId);
+    if (it == m_instrumentTrackIdMap.end()) {
+        return Promise<SoundPresetList>([](auto, auto reject) {
+            return reject(static_cast<int>(Ret::Code::UnknownError), "invalid instrumentTrackId");
+        });
+    }
+
+    return playback()->tracks()->availableSoundPresets(m_currentSequenceId, it->second);
+}
+
+mu::notation::INotationSoloMuteState::SoloMuteState PlaybackController::trackSoloMuteState(const InstrumentTrackId& trackId) const
+{
+    return m_notation->soloMuteState()->trackSoloMuteState(trackId);
+}
+
+void PlaybackController::setTrackSoloMuteState(const InstrumentTrackId& trackId,
+                                               const notation::INotationSoloMuteState::SoloMuteState& state) const
+{
+    m_notation->soloMuteState()->setTrackSoloMuteState(trackId, state);
 }
 
 void PlaybackController::playElements(const std::vector<const notation::EngravingItem*>& elements)
@@ -411,7 +439,7 @@ void PlaybackController::onSelectionChanged()
             updateMuteStates();
         }
 
-        if (!loopBoundariesSet()) {
+        if (!isLoopEnabled()) {
             seekListSelection();
         }
 
@@ -455,7 +483,7 @@ void PlaybackController::play()
         return;
     }
 
-    if (loopBoundariesSet() && isLoopEnabled()) {
+    if (isLoopEnabled()) {
         msecs_t startMsecs = playbackStartMsecs();
         seek(startMsecs);
     }
@@ -511,7 +539,7 @@ msecs_t PlaybackController::playbackStartMsecs() const
     }
 
     const LoopBoundaries& loop = notationPlayback()->loopBoundaries();
-    if (loop.visible) {
+    if (loop.enabled) {
         return tickToMsecs(loop.loopInTick);
     }
 
@@ -613,12 +641,12 @@ void PlaybackController::toggleCountIn()
 void PlaybackController::toggleLoopPlayback()
 {
     if (isLoopEnabled()) {
-        hideLoop();
+        disableLoop();
         return;
     }
 
     if (loopBoundariesSet() && !selection()->isRange()) {
-        showLoop();
+        enableLoop();
         return;
     }
 
@@ -660,20 +688,20 @@ void PlaybackController::addLoopBoundaryToTick(LoopBoundaryType type, int tick)
 {
     if (notationPlayback()) {
         notationPlayback()->addLoopBoundary(type, tick);
-        showLoop();
+        enableLoop();
     }
 }
 
 void PlaybackController::updateLoop()
 {
-    IF_ASSERT_FAILED(notationPlayback() && playback()) {
+    if (!notationPlayback() || !playback()) {
         return;
     }
 
     const LoopBoundaries& boundaries = notationPlayback()->loopBoundaries();
 
-    if (!boundaries.visible) {
-        hideLoop();
+    if (!boundaries.enabled) {
+        disableLoop();
         return;
     }
 
@@ -681,26 +709,26 @@ void PlaybackController::updateLoop()
     msecs_t toMsecs = tickToMsecs(boundaries.loopOutTick);
     playback()->player()->setLoop(m_currentSequenceId, fromMsesc, toMsecs);
 
-    showLoop();
+    enableLoop();
 
     notifyActionCheckedChanged(LOOP_CODE);
 }
 
-void PlaybackController::showLoop()
+void PlaybackController::enableLoop()
 {
     if (notationPlayback()) {
-        notationPlayback()->setLoopBoundariesVisible(true);
+        notationPlayback()->setLoopBoundariesEnabled(true);
     }
 }
 
-void PlaybackController::hideLoop()
+void PlaybackController::disableLoop()
 {
     IF_ASSERT_FAILED(notationPlayback() && playback()) {
         return;
     }
 
     playback()->player()->resetLoop(m_currentSequenceId);
-    notationPlayback()->setLoopBoundariesVisible(false);
+    notationPlayback()->setLoopBoundariesEnabled(false);
 
     notifyActionCheckedChanged(LOOP_CODE);
 }
@@ -986,6 +1014,7 @@ void PlaybackController::removeTrack(const InstrumentTrackId& instrumentTrackId)
 
     playback()->tracks()->removeTrack(m_currentSequenceId, search->second);
     audioSettings()->removeTrackParams(instrumentTrackId);
+    m_notation->soloMuteState()->removeTrackSoloMuteState(instrumentTrackId);
 
     m_trackRemoved.send(search->second);
     m_instrumentTrackIdMap.erase(instrumentTrackId);
@@ -1126,13 +1155,8 @@ void PlaybackController::setupSequenceTracks()
         updateMuteStates();
     });
 
-    audioSettings()->trackSoloMuteStateChanged().onReceive(
-        this, [this](const InstrumentTrackId&, const project::IProjectAudioSettings::SoloMuteState&) {
-        updateMuteStates();
-    });
-
     audioSettings()->auxSoloMuteStateChanged().onReceive(
-        this, [this](aux_channel_idx_t, const project::IProjectAudioSettings::SoloMuteState&) {
+        this, [this](aux_channel_idx_t, const notation::INotationSoloMuteState::SoloMuteState&) {
         updateMuteStates();
     });
 
@@ -1144,10 +1168,6 @@ void PlaybackController::setupSequencePlayer()
     playback()->player()->playbackPositionMsecs().onReceive(
         this, [this](const TrackSequenceId id, const audio::msecs_t& msecs) {
         if (m_currentSequenceId != id) {
-            return;
-        }
-
-        if (!isPlaying()) {
             return;
         }
 
@@ -1171,7 +1191,7 @@ void PlaybackController::setupSequencePlayer()
 
 void PlaybackController::updateMuteStates()
 {
-    if (!audioSettings() || !playback()) {
+    if (!audioSettings() || !playback() || !m_notation) {
         return;
     }
 
@@ -1181,7 +1201,7 @@ void PlaybackController::updateMuteStates()
     bool hasSolo = false;
 
     for (const InstrumentTrackId& instrumentTrackId : existingTrackIdSet) {
-        if (audioSettings()->trackSoloMuteState(instrumentTrackId).solo) {
+        if (m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId).solo) {
             hasSolo = true;
             break;
         }
@@ -1203,7 +1223,7 @@ void PlaybackController::updateMuteStates()
         const Part* part = notationParts->part(instrumentTrackId.partId);
         bool isPartVisible = part && part->show();
 
-        auto soloMuteState = audioSettings()->trackSoloMuteState(instrumentTrackId);
+        auto soloMuteState = m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId);
 
         bool shouldBeMuted = soloMuteState.mute
                              || (hasSolo && !soloMuteState.solo)
@@ -1416,6 +1436,11 @@ void PlaybackController::setNotation(notation::INotationPtr notation)
         if (text->isHarmony()) {
             playElements({ text });
         }
+    });
+
+    m_notation->soloMuteState()->trackSoloMuteStateChanged().onReceive(
+        this, [this](const InstrumentTrackId&, const notation::INotationSoloMuteState::SoloMuteState&) {
+        updateMuteStates();
     });
 }
 

@@ -62,7 +62,9 @@
 #include "sticking.h"
 #include "stringtunings.h"
 #include "tie.h"
-#include "tremolo.h"
+#include "guitarbend.h"
+#include "fret.h"
+
 #include "tremolotwochord.h"
 #include "tremolosinglechord.h"
 #include "tuplet.h"
@@ -162,9 +164,6 @@ bool SelectionFilter::canSelect(const EngravingItem* e) const
     }
     if (e->isSLine()) { // NoteLine, Volta
         return isFiltered(SelectionFilterType::OTHER_LINE);
-    }
-    if (e->type() == ElementType::TREMOLO) {
-        return isFiltered(SelectionFilterType::TREMOLO);
     }
     if (e->type() == ElementType::TREMOLO_TWOCHORD) {
         return isFiltered(SelectionFilterType::TREMOLO);
@@ -533,9 +532,49 @@ void Selection::appendChord(Chord* chord)
                 Note* endNote = toNote(sp->endElement());
                 Segment* s = endNote->chord()->segment();
                 if (!s || s->tick() < tickEnd()) {
+                    if (sp->isGuitarBend()) {
+                        appendGuitarBend(toGuitarBend(sp));
+                        continue;
+                    }
                     m_el.push_back(sp);
                 }
             }
+        }
+    }
+}
+
+void Selection::appendTupletHierarchy(Tuplet* innermostTuplet)
+{
+    if (mu::contains(m_el, static_cast<EngravingItem*>(innermostTuplet))) {
+        return;
+    }
+
+    appendFiltered(innermostTuplet);
+
+    // Recursively append upwards/outwards
+    Tuplet* outerTuplet = innermostTuplet->tuplet();
+    if (outerTuplet) {
+        appendTupletHierarchy(outerTuplet);
+    }
+}
+
+void Selection::appendGuitarBend(GuitarBend* guitarBend)
+{
+    if (!guitarBend) {
+        return;
+    }
+
+    m_el.push_back(guitarBend);
+
+    if (GuitarBendHold* hold = guitarBend->holdLine()) {
+        if (hold->tick2() < tickEnd()) {
+            m_el.push_back(hold);
+        }
+    }
+
+    if (GuitarBendSegment* bendSeg = toGuitarBendSegment(guitarBend->frontSegment())) {
+        if (GuitarBendText* bendText = bendSeg->bendText()) {
+            m_el.push_back(bendText);
         }
     }
 }
@@ -610,6 +649,12 @@ void Selection::updateSelectedElements()
                 if (e->track() != st) {
                     continue;
                 }
+                if (e->isFretDiagram()) {
+                    FretDiagram* fd = toFretDiagram(e);
+                    if (Harmony* harm = fd->harmony()) {
+                        appendFiltered(harm);
+                    }
+                }
                 appendFiltered(e);
             }
             EngravingItem* e = s->element(st);
@@ -622,6 +667,10 @@ void Selection::updateSelectedElements()
                     if (el) {
                         appendFiltered(el);
                     }
+                }
+                Tuplet* tuplet = cr->tuplet();
+                if (tuplet) {
+                    appendTupletHierarchy(tuplet);
                 }
             }
             if (e->isChord()) {
@@ -690,7 +739,12 @@ void Selection::setRange(Segment* startSegment, Segment* endSegment, staff_idx_t
     m_activeSegment = endSegment;
     m_staffStart    = staffStart;
     m_staffEnd      = staffEnd;
-    setState(SelState::RANGE);
+
+    if (m_state == SelState::RANGE) {
+        m_score->setSelectionChanged(true);
+    } else {
+        setState(SelState::RANGE);
+    }
 }
 
 //---------------------------------------------------------
@@ -705,13 +759,17 @@ void Selection::setRangeTicks(const Fraction& tick1, const Fraction& tick2, staf
 {
     assert(staffEnd > staffStart && staffEnd <= m_score->nstaves());
 
-    deselectAll();
     m_plannedTick1 = tick1;
     m_plannedTick2 = tick2;
     m_startSegment = m_endSegment = m_activeSegment = nullptr;
     m_staffStart    = staffStart;
     m_staffEnd      = staffEnd;
-    setState(SelState::RANGE);
+
+    if (m_state == SelState::RANGE) {
+        m_score->setSelectionChanged(true);
+    } else {
+        setState(SelState::RANGE);
+    }
 }
 
 //---------------------------------------------------------

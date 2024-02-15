@@ -29,6 +29,8 @@ set(RENDERING_STABLE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/measurelayout.h
     ${CMAKE_CURRENT_LIST_DIR}/beamlayout.cpp
     ${CMAKE_CURRENT_LIST_DIR}/beamlayout.h
+    ${CMAKE_CURRENT_LIST_DIR}/beamtremololayout.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/beamtremololayout.h
     ${CMAKE_CURRENT_LIST_DIR}/chordlayout.cpp
     ${CMAKE_CURRENT_LIST_DIR}/chordlayout.h
     ${CMAKE_CURRENT_LIST_DIR}/tupletlayout.cpp
@@ -60,4 +62,7 @@ set(RENDERING_STABLE_SRC
     ${CMAKE_CURRENT_LIST_DIR}/passresetlayoutdata.h
     ${CMAKE_CURRENT_LIST_DIR}/passlayoutindependentitems.cpp
     ${CMAKE_CURRENT_LIST_DIR}/passlayoutindependentitems.h
+
+    ${CMAKE_CURRENT_LIST_DIR}/dumplayoutdata.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/dumplayoutdata.h
 )

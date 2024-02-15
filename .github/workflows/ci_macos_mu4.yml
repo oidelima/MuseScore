@@ -25,14 +25,14 @@ on:
 
 env:
   CURRENT_RELEASE_BRANCH: 4.2.1
-  DEVELOPER_DIR: /Applications/Xcode_14.3.1.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_15.2.app/Contents/Developer
 
 jobs:
   build_mu4:    
     runs-on: macos-13
     steps:
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.11.0
+      uses: styfle/cancel-workflow-action@0.12.1
       with:
         access_token: ${{ github.token }}
     - name: Clone repository (default)
@@ -44,7 +44,7 @@ jobs:
       with:
         ref: ${{ env.CURRENT_RELEASE_BRANCH }}
     - name: Ccache cache files
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.ccache
         key: ${{github.workflow}}-ccache-$(date -u +"%F-%T")
@@ -168,6 +168,9 @@ jobs:
         bash ./build/ci/macos/setup.sh  
     - name: Generate _en.ts files
       if: env.DO_BUILD == 'true'
+      env:
+        LUPDATE_ARGS: ""
+        POSTPROCESS_ARGS: "--warn-only ${{ env.DO_PLACEHOLDER_TRANSLATIONS == 'true' && '--generate-placeholder-translations' || '' }}"
       run: |
         bash ./build/ci/translation/run_lupdate.sh
     - name: Update .ts files
@@ -175,10 +178,6 @@ jobs:
       run: |
         bash ./build/ci/translation/tx_install.sh -t ${{ secrets.TRANSIFEX_API_TOKEN }} -s macos
         bash ./build/ci/translation/tx_pull.sh
-    - name: Generate placeholder.ts files
-      if: env.DO_PLACEHOLDER_TRANSLATIONS == 'true'
-      run: |
-        python3 ./tools/translations/placeholder_translations.py --warn-only
     - name: Build
       if: env.DO_BUILD == 'true'    
       run: |
@@ -221,7 +220,7 @@ jobs:
         bash ./build/ci/tools/sparkle_appcast_gen.sh -p macos   
     - name: Upload artifacts on GitHub
       if: env.DO_BUILD == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.UPLOAD_ARTIFACT_NAME }}
         path: ./build.artifacts/

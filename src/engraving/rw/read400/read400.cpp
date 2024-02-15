@@ -33,7 +33,6 @@
 #include "dom/tuplet.h"
 #include "dom/chord.h"
 #include "dom/beam.h"
-#include "dom/tremolo.h"
 #include "dom/lyrics.h"
 #include "dom/note.h"
 #include "dom/measurerepeat.h"
@@ -277,8 +276,6 @@ bool Read400::readScore400(Score* score, XmlReader& e, ReadContext& ctx)
     for (int idx : sysStaves) {
         score->addSystemObjectStaff(score->staff(idx));
     }
-
-//      createPlayEvents();
 
     return true;
 }
@@ -1020,6 +1017,11 @@ void Read400::pasteSymbols(XmlReader& e, ChordRest* dst)
         }                                 // outer while readNextstartElement()
     }                                     // inner while readNextstartElement()
 }                                         // pasteSymbolList()
+
+void Read400::readTremoloCompat(compat::TremoloCompat*, XmlReader&)
+{
+    UNREACHABLE;
+}
 
 void Read400::doReadItem(EngravingItem* item, XmlReader& xml)
 {
